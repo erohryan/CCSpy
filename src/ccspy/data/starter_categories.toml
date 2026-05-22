@@ -1,0 +1,59 @@
+# ccspy category rules — first match wins.
+# Edit this file (press 'e' in the dashboard) to customise your categories.
+# Matching is case-insensitive substring against the first user message of each session.
+
+[[rule]]
+category = "debug"
+match_any = ["fix", "bug", "broken", "doesn't work", "not working", "error", "crash", "failing", "exception", "why is", "why does", "what's wrong", "issue with"]
+
+[[rule]]
+category = "feature-build"
+match_any = ["implement", "add feature", "build", "create", "new feature", "scaffold", "write a", "make a"]
+
+[[rule]]
+category = "design"
+match_any = ["design", "ui", "ux", "layout", "wireframe", "mockup", "component", "style", "css", "frontend", "interface", "visual"]
+
+[[rule]]
+category = "planning"
+match_any = ["plan", "roadmap", "architecture", "approach", "strategy", "scope", "should i", "how should", "what's the best", "what would", "thinking about", "considering"]
+
+[[rule]]
+category = "refactor"
+match_any = ["refactor", "clean up", "cleanup", "extract", "rename", "reorganise", "reorganize", "restructure", "simplify", "decouple", "abstract"]
+
+[[rule]]
+category = "test"
+match_any = ["test", "spec", "unit test", "integration test", "coverage", "mock", "assert", "jest", "pytest", "vitest"]
+
+[[rule]]
+category = "review"
+match_any = ["review", "look at", "check this", "audit", "inspect", "analyse", "analyze", "what do you think", "feedback on", "read through"]
+
+[[rule]]
+category = "docs"
+match_any = ["document", "readme", "comment", "docstring", "explain", "write up", "summarise", "summarize", "changelog"]
+
+[[rule]]
+category = "setup"
+match_any = ["setup", "set up", "install", "configure", "init", "boilerplate", "scaffold project", "new project", "getting started", "environment"]
+
+[[rule]]
+category = "data-model"
+match_any = ["schema", "database", "migration", "model", "table", "column", "relation", "query", "sql", "orm", "prisma", "drizzle"]
+
+[[rule]]
+category = "performance"
+match_any = ["optimise", "optimize", "slow", "performance", "speed", "memory", "benchmark", "profil", "latency", "bottleneck", "cache"]
+
+[[rule]]
+category = "security"
+match_any = ["security", "auth", "authentication", "authorisation", "authorization", "permission", "vulnerability", "sanitize", "validate input", "xss", "csrf", "injection"]
+
+[[rule]]
+category = "devops"
+match_any = ["deploy", "ci", "cd", "pipeline", "docker", "kubernetes", "k8s", "nginx", "infra", "terraform", "github action", "workflow", "build script"]
+
+[[rule]]
+category = "question"
+match_any = ["how does", "what is", "explain", "can you", "tell me", "what are", "why does", "walk me through"]

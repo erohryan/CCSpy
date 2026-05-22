@@ -1,0 +1,103 @@
+/* ccspy dashboard theme
+   Colour roles:
+     dim/border   : #444466
+     amber        : #d4a853  (totals/headers)
+     teal         : #2ac3de  (project bars, daily, generic)
+     orange       : #e0823a  (peaks / above-avg)
+     green        : #44cf6c  (live indicator)
+     magenta      : #c678dd  (model bars)
+     muted        : #7a7a9a  (labels, secondary text)
+*/
+
+Screen {
+    background: #1a1a2e;
+    layout: vertical;
+    overflow: hidden;
+}
+
+#header {
+    height: 1;
+    background: #12122a;
+    color: #7a7a9a;
+    padding: 0 2;
+}
+
+#live-strip {
+    height: 2;
+    background: #1a1a2e;
+    color: #44cf6c;
+    padding: 0 2;
+}
+
+.separator {
+    height: 1;
+    color: #2d2d4e;
+    padding: 0 2;
+}
+
+#range-row {
+    height: 1;
+    color: #7a7a9a;
+    padding: 0 2;
+}
+
+#totals {
+    height: 3;
+    color: #d4a853;
+    padding: 0 2;
+}
+
+#daily {
+    height: 2;
+    color: #2ac3de;
+    padding: 0 2;
+}
+
+.two-col {
+    height: 8;
+}
+
+#project-bars {
+    width: 1fr;
+    color: #2ac3de;
+    padding: 0 2;
+    border-right: solid #2d2d4e;
+}
+
+#model-bars {
+    width: 1fr;
+    color: #c678dd;
+    padding: 0 2;
+}
+
+#category-bars {
+    width: 1fr;
+    color: #2ac3de;
+    padding: 0 2;
+    border-right: solid #2d2d4e;
+}
+
+#tool-bars {
+    width: 1fr;
+    color: #7a7a9a;
+    padding: 0 2;
+}
+
+#time-of-day {
+    height: 2;
+    color: #7a7a9a;
+    padding: 0 2;
+}
+
+#subagent-stats {
+    height: 1;
+    color: #7a7a9a;
+    padding: 0 2;
+}
+
+#cmd-footer {
+    height: 1;
+    background: #12122a;
+    color: #555577;
+    padding: 0 2;
+}

@@ -1,0 +1,88 @@
+[_meta]
+updated = "2026-05-22"
+source = "https://platform.claude.com/docs/en/about-claude/pricing"
+
+# All rates are USD per million tokens.
+# cache_write_5m_per_mtok = 5-minute ephemeral cache write rate (1.25x base input)
+# cache_write_1h_per_mtok = 1-hour ephemeral cache write rate (2x base input)
+# cache_read_per_mtok     = cache hit/refresh rate (0.1x base input)
+
+[models.claude-opus-4-7]
+display_name = "Claude Opus 4.7"
+input_per_mtok = 5.00
+output_per_mtok = 25.00
+cache_write_5m_per_mtok = 6.25
+cache_write_1h_per_mtok = 10.00
+cache_read_per_mtok = 0.50
+
+[models.claude-opus-4-6]
+display_name = "Claude Opus 4.6"
+input_per_mtok = 5.00
+output_per_mtok = 25.00
+cache_write_5m_per_mtok = 6.25
+cache_write_1h_per_mtok = 10.00
+cache_read_per_mtok = 0.50
+
+[models."claude-opus-4-5-20251101"]
+display_name = "Claude Opus 4.5"
+input_per_mtok = 5.00
+output_per_mtok = 25.00
+cache_write_5m_per_mtok = 6.25
+cache_write_1h_per_mtok = 10.00
+cache_read_per_mtok = 0.50
+
+[models."claude-opus-4-1-20250805"]
+display_name = "Claude Opus 4.1"
+input_per_mtok = 15.00
+output_per_mtok = 75.00
+cache_write_5m_per_mtok = 18.75
+cache_write_1h_per_mtok = 30.00
+cache_read_per_mtok = 1.50
+
+[models."claude-opus-4-20250514"]
+display_name = "Claude Opus 4 (deprecated)"
+input_per_mtok = 15.00
+output_per_mtok = 75.00
+cache_write_5m_per_mtok = 18.75
+cache_write_1h_per_mtok = 30.00
+cache_read_per_mtok = 1.50
+
+[models.claude-sonnet-4-6]
+display_name = "Claude Sonnet 4.6"
+input_per_mtok = 3.00
+output_per_mtok = 15.00
+cache_write_5m_per_mtok = 3.75
+cache_write_1h_per_mtok = 6.00
+cache_read_per_mtok = 0.30
+
+[models."claude-sonnet-4-5-20250929"]
+display_name = "Claude Sonnet 4.5"
+input_per_mtok = 3.00
+output_per_mtok = 15.00
+cache_write_5m_per_mtok = 3.75
+cache_write_1h_per_mtok = 6.00
+cache_read_per_mtok = 0.30
+
+[models."claude-sonnet-4-20250514"]
+display_name = "Claude Sonnet 4 (deprecated)"
+input_per_mtok = 3.00
+output_per_mtok = 15.00
+cache_write_5m_per_mtok = 3.75
+cache_write_1h_per_mtok = 6.00
+cache_read_per_mtok = 0.30
+
+[models."claude-haiku-4-5-20251001"]
+display_name = "Claude Haiku 4.5"
+input_per_mtok = 1.00
+output_per_mtok = 5.00
+cache_write_5m_per_mtok = 1.25
+cache_write_1h_per_mtok = 2.00
+cache_read_per_mtok = 0.10
+
+[models."claude-haiku-3-5-20241022"]
+display_name = "Claude Haiku 3.5 (retired)"
+input_per_mtok = 0.80
+output_per_mtok = 4.00
+cache_write_5m_per_mtok = 1.00
+cache_write_1h_per_mtok = 1.60
+cache_read_per_mtok = 0.08

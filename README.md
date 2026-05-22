@@ -1,0 +1,2 @@
+# CCSpy
+Claude Code Monitor

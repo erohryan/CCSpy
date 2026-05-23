@@ -137,14 +137,39 @@ class Store:
             except Exception as exc:
                 log.warning("Failed to sync codex %s: %s", path, exc)
 
+    def _session_id_from_path(self, path: Path) -> str:
+        """Derive the session UUID from a JSONL file path."""
+        if "subagents" in path.parts:
+            return path.parent.parent.name  # .../proj/<uuid>/subagents/agent-x.jsonl
+        return path.stem  # .../proj/<uuid>.jsonl
+
+    def _session_exists_for_path(self, path: Path) -> bool:
+        sid = self._session_id_from_path(path)
+        row = self._conn.execute(
+            "SELECT 1 FROM sessions WHERE session_id = ? LIMIT 1", (sid,)
+        ).fetchone()
+        return row is not None
+
+    def sync_file(self, path: Path, source: str = "claude") -> None:
+        """Sync a single file, used by live session detection."""
+        try:
+            self._sync_file(path, source=source, force=False, verbose=False)
+        except Exception as exc:
+            log.warning("Failed to sync %s: %s", path, exc)
+
     def _sync_file(self, path: Path, source: str, force: bool, verbose: bool) -> None:
         mtime = path.stat().st_mtime
         row = self._conn.execute(
             "SELECT mtime, last_byte_offset FROM files WHERE path = ?", (str(path),)
         ).fetchone()
 
+        # If the file is tracked but its session is missing, re-sync from 0
+        # regardless of mtime — the session metadata lives at byte 0.
+        if not force and row and not self._session_exists_for_path(path):
+            force = True
+
         if not force and row and abs(row["mtime"] - mtime) < 0.001:
-            return  # up to date
+            return  # genuinely up to date
 
         start_offset = 0 if force else (row["last_byte_offset"] if row else 0)
 
@@ -199,7 +224,13 @@ class Store:
                ON CONFLICT(session_id) DO UPDATE SET
                  ended_at = excluded.ended_at,
                  summary  = excluded.summary,
-                 first_user_text = excluded.first_user_text
+                 first_user_text = excluded.first_user_text,
+                 jsonl_path = CASE
+                   WHEN sessions.jsonl_path LIKE '%subagents%'
+                    AND excluded.jsonl_path NOT LIKE '%subagents%'
+                   THEN excluded.jsonl_path
+                   ELSE sessions.jsonl_path
+                 END
             """,
             (
                 s.session_id, s.project_path, s.project_name,

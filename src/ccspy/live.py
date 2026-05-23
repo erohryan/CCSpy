@@ -43,12 +43,23 @@ def get_live_sessions(store) -> list[LiveSession]:
         candidates.append((age, path))
 
     candidates.sort(key=lambda x: x[0])
-    live: list[LiveSession] = []
 
-    for age, path in candidates[:MAX_LIVE_SHOWN]:
+    # Sync each live file so brand-new or out-of-sync sessions appear in the store.
+    for age, path in candidates[:MAX_LIVE_SHOWN * 4]:
+        store.sync_file(path, source="claude")
+
+    live: list[LiveSession] = []
+    seen_session_ids: set[str] = set()
+    for age, path in candidates:
+        sid = store._session_id_from_path(path)
+        if sid in seen_session_ids:
+            continue  # already showing this session (e.g. via its subagent file)
         session = _build_live_session(path, age, store)
         if session:
+            seen_session_ids.add(session.session_id)
             live.append(session)
+        if len(live) >= MAX_LIVE_SHOWN:
+            break
 
     return live
 
@@ -59,6 +70,10 @@ def _build_live_session(path: Path, age_seconds: float, store) -> LiveSession | 
     from ccspy.parser import project_name_from_dir
     project_name = project_name_from_dir(project_dir.name)
 
+    # Look up by session_id derived from the path — more reliable than jsonl_path
+    # because the session may have been first inserted via a subagent file.
+    session_id = store._session_id_from_path(path)
+
     rows = store.query(
         """
         SELECT t.model, t.turn_id,
@@ -66,11 +81,11 @@ def _build_live_session(path: Path, age_seconds: float, store) -> LiveSession | 
           s.session_id, s.started_at
         FROM turns t
         JOIN sessions s ON t.session_id = s.session_id
-        WHERE s.jsonl_path = ?
+        WHERE s.session_id = ?
         ORDER BY t.ts DESC
         LIMIT 6
         """,
-        (str(path),),
+        (session_id,),
     )
     if not rows:
         return None

@@ -1,4 +1,4 @@
-"""Timing stats panel — processing time and user wait time."""
+"""Timing stats panel — total processing time and total user wait time."""
 from __future__ import annotations
 
 from textual.widget import Widget
@@ -9,7 +9,7 @@ from ccspy.ui.widgets._format import fmt_duration
 
 
 class TimingPanel(Widget):
-    """Shows avg/median processing time (Claude→you) and wait time (you→Claude)."""
+    """Shows total time Claude spent processing and total time waiting for the user."""
 
     DEFAULT_CSS = "TimingPanel { height: 1; color: #7a7a9a; padding: 0 2; }"
 
@@ -30,13 +30,11 @@ class TimingPanel(Widget):
             t.append("  rebuild cache to populate", style="dim")
             return t
 
-        t.append("  Claude ", style="dim")
-        t.append(f"avg {fmt_duration(s.avg_processing_secs)}", style="white")
-        t.append(f" median {fmt_duration(s.median_processing_secs)}", style="dim")
+        t.append("  building ", style="dim")
+        t.append(fmt_duration(s.total_processing_secs), style="white")
 
-        t.append("     you ", style="dim")
-        t.append(f"avg {fmt_duration(s.avg_wait_secs)}", style="white")
-        t.append(f" median {fmt_duration(s.median_wait_secs)}", style="dim")
+        t.append("   waiting ", style="dim")
+        t.append(fmt_duration(s.total_wait_secs), style="white")
 
-        t.append(f"     {s.samples} turns", style="dim")
+        t.append(f"   {s.samples} turns", style="dim")
         return t

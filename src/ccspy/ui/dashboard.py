@@ -134,9 +134,8 @@ class DashboardScreen(Screen):
             yield ToolBarsPanel(id="tool-bars")
         yield _Separator()
         yield TimeOfDayPanel(id="time-of-day")
-        with Horizontal(classes="two-col"):
-            yield SubagentStatsPanel(id="subagent-stats")
-            yield TimingPanel(id="timing")
+        yield SubagentStatsPanel(id="subagent-stats")
+        yield TimingPanel(id="timing")
         yield _Separator()
         yield _CommandFooter()
 

@@ -99,10 +99,8 @@ class SubagentStats:
 
 @dataclass
 class TimingStats:
-    avg_processing_secs: float = 0.0
-    median_processing_secs: float = 0.0
-    avg_wait_secs: float = 0.0
-    median_wait_secs: float = 0.0
+    total_processing_secs: float = 0.0
+    total_wait_secs: float = 0.0
     samples: int = 0
 
 
@@ -391,26 +389,19 @@ class Aggregator:
             (since,),
         )
 
-        proc = sorted(
+        proc = [
             r["proc_secs"] for r in rows
             if r["proc_secs"] is not None and 0.5 < r["proc_secs"] < 600
-        )
-        wait = sorted(
+        ]
+        # Cap at 5 min — longer gaps are new independent requests, not continuations
+        wait = [
             r["wait_secs"] for r in rows
-            if r["wait_secs"] is not None and 1 < r["wait_secs"] < 10800
-        )
-
-        def _median(vals: list) -> float:
-            if not vals:
-                return 0.0
-            n = len(vals)
-            return vals[n // 2] if n % 2 else (vals[n // 2 - 1] + vals[n // 2]) / 2
+            if r["wait_secs"] is not None and 1 < r["wait_secs"] < 300
+        ]
 
         return TimingStats(
-            avg_processing_secs=sum(proc) / len(proc) if proc else 0.0,
-            median_processing_secs=_median(proc),
-            avg_wait_secs=sum(wait) / len(wait) if wait else 0.0,
-            median_wait_secs=_median(wait),
+            total_processing_secs=sum(proc),
+            total_wait_secs=sum(wait),
             samples=len(proc),
         )
 

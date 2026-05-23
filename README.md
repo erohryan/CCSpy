@@ -1,10 +1,21 @@
 # ccspy — Claude Code Spy
 
-> A local-first terminal dashboard for your Claude Code token usage. See exactly where your tokens go, what it would cost on the pay-as-you-go API, and how you actually work.
+> A local-first terminal dashboard for your AI coding agent token usage. See exactly where your tokens go, what it would cost on the pay-as-you-go API, and how you actually work.
 
 ![ccspy dashboard](CCSpy.jpeg)
 
-**ccspy is read-only — it never touches your Claude Code data.**
+**ccspy is read-only — it never touches your Claude Code or Codex data.**
+
+---
+
+## Supported tools
+
+| Tool | Data source |
+|------|-------------|
+| **Claude Code** | `~/.claude/projects/**/*.jsonl` |
+| **OpenAI Codex CLI** | `~/.codex/sessions/**/*.jsonl` |
+
+Both sources are read automatically and merged into a unified dashboard. No configuration required if you use the default install locations.
 
 ---
 
@@ -14,17 +25,15 @@
 - **Token totals** — headline count with ≈ api-equiv cost, delta vs previous period, and in/out/cache breakdown
 - **Daily sparkline** — per-day token volume with peak annotation and cost
 - **By project** — horizontal bar chart of token share across your projects, filterable
-- **By model** — Sonnet vs Haiku vs Opus split with per-model api-equiv cost
+- **By model** — Sonnet vs Haiku vs Opus vs GPT split with per-model api-equiv cost
 - **By category** — keyword-rule categorisation of sessions (feature-build, debug, design, etc.) — fully customisable
-- **Tool use** — which tools Claude called most (Read, Edit, Bash, Write, …)
+- **Task breakdown** — per-project message count, avg task duration, and plan vs execute token split
 - **Time-of-day** — 24-bar sparkline in your local timezone, peak hour annotation
-- **Timing stats** — avg/median time Claude takes to respond + avg/median time you take to reply
+- **Timing stats** — total time Claude spent building + total time Claude waited for you to continue
 - **Subagent tracking** — spawned subagent count and avg per session
-- **Drill-downs** — project → session → turn detail; tool breakdown by project; pricing table; data sources
+- **Drill-downs** — project → session → turn detail; pricing table; data sources
 - **Command palette** (`:`) — fuzzy-search over all actions
 - **Export** — dump current view to CSV
-
-All data is read from `~/.claude/projects/**/*.jsonl`. A SQLite cache at `~/.config/ccspy/cache.db` makes subsequent launches instant.
 
 ---
 
@@ -32,7 +41,7 @@ All data is read from `~/.claude/projects/**/*.jsonl`. A SQLite cache at `~/.con
 
 - Python 3.11+
 - [uv](https://docs.astral.sh/uv/getting-started/installation/) (recommended) or pip
-- Claude Code with at least one session in `~/.claude/projects/`
+- Claude Code and/or Codex CLI with at least one session on disk
 
 ---
 
@@ -104,6 +113,29 @@ Inside drill-down screens, `Enter` navigates deeper and `Esc` goes back.
 
 ---
 
+## Task breakdown
+
+The **TASKS** panel shows per-project:
+
+- **msgs** — number of distinct user messages sent (each message = one task)
+- **avg duration** — median time from sending a message to Claude finishing
+- **plan vs execute bar** — token share split between planning turns (reading, exploring, no file changes) and execution turns (Edit, Write, Bash)
+
+This gives you a sense of how much of your AI usage is thinking vs doing across each project.
+
+---
+
+## Timing
+
+The **TIMINGS** row shows cumulative time across all turns in the selected range:
+
+- **building** — total time Claude spent processing your requests
+- **waiting** — total time Claude sat idle waiting for you to continue (capped at 5 minutes per gap — longer gaps are treated as new requests, not continuations)
+
+If you see "rebuild cache to populate", run `ccspy cache rebuild` once. This re-parses your JSONL files to capture the message timestamps needed for timing calculations.
+
+---
+
 ## Categories
 
 Categories classify your sessions by what you were doing. They're defined in `~/.config/ccspy/categories.toml` as keyword rules — first match wins.
@@ -126,7 +158,7 @@ Matching is case-insensitive substring against the first user message of each se
 
 ## Money figures
 
-All dollar amounts are labelled **api-equiv**. If you're on Claude Pro or Max (flat-rate plans), these numbers are *not* your actual bill — they represent what the same token usage would cost on the pay-as-you-go API. Useful for understanding relative cost across projects and models.
+All dollar amounts are labelled **api-equiv**. If you're on Claude Pro, Max, or a Codex subscription (flat-rate plans), these numbers are *not* your actual bill — they represent what the same token usage would cost on the pay-as-you-go API. Useful for understanding relative cost across projects and models.
 
 Pricing is bundled with the package and updated manually. Run `: → Pricing table` in the command palette to see current rates.
 
@@ -134,26 +166,19 @@ Pricing is bundled with the package and updated manually. Run `: → Pricing tab
 
 ## Non-standard data locations
 
-By default ccspy looks for Claude Code data at `~/.claude/projects/`. If yours is elsewhere (WSL, custom install, multiple accounts), set `CLAUDE_HOME`:
+By default ccspy looks for data at `~/.claude/projects/` and `~/.codex/sessions/`. If yours is elsewhere (WSL, custom install, multiple accounts), set the appropriate env var:
 
 ```bash
-# WSL — Claude Code data is on the Windows side
+# Claude Code — WSL or custom install
 export CLAUDE_HOME="/mnt/c/Users/yourname/.claude"
+
+# Codex CLI — non-default location
+export CODEX_HOME="/path/to/your/.codex"
+
 ccspy
 ```
 
-Add it to your shell profile (`~/.zshrc`, `~/.bashrc`) to make it permanent.
-
----
-
-## Timing data
-
-The TIMINGS row shows:
-
-- **Claude** — how long Claude takes to respond (avg and median across turns)
-- **You** — how long you take to reply after Claude finishes
-
-If you see "rebuild cache to populate", run `ccspy cache rebuild` once. This re-parses your JSONL files to capture the user message timestamps needed for timing calculations.
+Add these to your shell profile (`~/.zshrc`, `~/.bashrc`) to make them permanent.
 
 ---
 
@@ -174,11 +199,12 @@ ccspy cache rebuild
 | Purpose | Path |
 |---------|------|
 | Claude Code transcripts | `~/.claude/projects/**/*.jsonl` |
+| Codex CLI transcripts | `~/.codex/sessions/**/*.jsonl` |
 | ccspy cache | `~/.config/ccspy/cache.db` |
 | Category rules | `~/.config/ccspy/categories.toml` |
 | Logs | `~/.config/ccspy/ccspy.log` |
 
-ccspy never writes to `~/.claude/`.
+ccspy never writes to `~/.claude/` or `~/.codex/`.
 
 ---
 

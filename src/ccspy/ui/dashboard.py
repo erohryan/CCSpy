@@ -84,7 +84,7 @@ class _CommandFooter(Static):
     DEFAULT_CSS = "_CommandFooter { height: 1; background: #12122a; color: #555577; padding: 0 2; }"
 
     def render(self) -> str:
-        return "commands:  : palette   p projects   s sessions   t tools   x export   / filter   r reload   ? help   q quit"
+        return "commands:  : palette   p projects   s sessions   t tools   u suggest   x export   / filter   r reload   ? help   q quit"
 
 
 class DashboardScreen(Screen):
@@ -100,6 +100,7 @@ class DashboardScreen(Screen):
         Binding("s", "drill_sessions", "sessions", show=False),
         Binding("t", "drill_tools", "tools", show=False),
         Binding("e", "edit_categories", "edit rules", show=False),
+        Binding("u", "suggest_categories", "suggest", show=False),
         Binding("x", "export_csv", "export", show=False),
         Binding("/", "filter_prompt", "filter", show=False),
         Binding("r", "reload", "reload", show=False),
@@ -266,6 +267,32 @@ class DashboardScreen(Screen):
 
     def action_custom_range(self) -> None:
         self.notify("Custom range: coming in Phase 6", title="ccspy")
+
+    def action_suggest_categories(self) -> None:
+        from ccspy.suggest import get_uncategorised_texts, analyse
+        from ccspy.ui.suggest_screen import SuggestScreen
+        from ccspy.aggregator import _since_ts
+        from ccspy.categories import load_rules, USER_CATEGORIES_PATH
+
+        rules = load_rules()
+        since = _since_ts(self._range_days)
+        texts, tokens = get_uncategorised_texts(self._store, since, rules)
+        suggestions = analyse(texts)
+
+        def _on_accept(n: int) -> None:
+            if n:
+                self.notify(f"Added {n} category rule{'s' if n != 1 else ''}", title="ccspy")
+            self._refresh_data()
+
+        self.app.push_screen(
+            SuggestScreen(
+                rules=suggestions,
+                uncategorised_count=len(texts),
+                uncategorised_tokens=tokens,
+                categories_path=USER_CATEGORIES_PATH,
+                on_accept=_on_accept,
+            )
+        )
 
     def action_help_overlay(self) -> None:
         from ccspy.ui.help_modal import HelpModal

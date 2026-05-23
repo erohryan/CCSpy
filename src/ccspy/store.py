@@ -21,6 +21,10 @@ from ccspy.parser import (
     discover_jsonl_files,
     parse_file,
 )
+from ccspy.codex_parser import (
+    discover_codex_jsonl_files,
+    iter_codex_turns,
+)
 
 log = logging.getLogger(__name__)
 
@@ -47,7 +51,8 @@ CREATE TABLE IF NOT EXISTS sessions (
     parent_session_id   TEXT NOT NULL DEFAULT '',
     jsonl_path          TEXT NOT NULL,
     is_sidechain        INTEGER NOT NULL DEFAULT 0,
-    first_user_text     TEXT NOT NULL DEFAULT ''
+    first_user_text     TEXT NOT NULL DEFAULT '',
+    source              TEXT NOT NULL DEFAULT 'claude'
 );
 
 CREATE TABLE IF NOT EXISTS turns (
@@ -62,7 +67,8 @@ CREATE TABLE IF NOT EXISTS turns (
     cache_creation_1h_tokens    INTEGER NOT NULL DEFAULT 0,
     cache_creation_5m_tokens    INTEGER NOT NULL DEFAULT 0,
     user_msg_ts                 TEXT NOT NULL DEFAULT '',
-    first_user_text             TEXT NOT NULL DEFAULT ''
+    first_user_text             TEXT NOT NULL DEFAULT '',
+    source                      TEXT NOT NULL DEFAULT 'claude'
 );
 
 CREATE TABLE IF NOT EXISTS tool_calls (
@@ -99,10 +105,15 @@ class Store:
         conn = sqlite3.connect(str(path), check_same_thread=False)
         conn.row_factory = sqlite3.Row
         conn.executescript(_DDL)
-        try:
-            conn.execute("ALTER TABLE turns ADD COLUMN user_msg_ts TEXT NOT NULL DEFAULT ''")
-        except sqlite3.OperationalError:
-            pass  # already exists
+        for migration in [
+            "ALTER TABLE turns ADD COLUMN user_msg_ts TEXT NOT NULL DEFAULT ''",
+            "ALTER TABLE turns ADD COLUMN source TEXT NOT NULL DEFAULT 'claude'",
+            "ALTER TABLE sessions ADD COLUMN source TEXT NOT NULL DEFAULT 'claude'",
+        ]:
+            try:
+                conn.execute(migration)
+            except sqlite3.OperationalError:
+                pass  # column already exists
         conn.commit()
         return cls(conn)
 
@@ -114,15 +125,19 @@ class Store:
     # ------------------------------------------------------------------
 
     def sync(self, force: bool = False, verbose: bool = False) -> None:
-        """Scan ~/.claude/projects and update the cache for changed files."""
-        paths = discover_jsonl_files()
-        for path in paths:
+        """Scan Claude and Codex session dirs and update the cache for changed files."""
+        for path in discover_jsonl_files():
             try:
-                self._sync_file(path, force=force, verbose=verbose)
+                self._sync_file(path, source="claude", force=force, verbose=verbose)
             except Exception as exc:
                 log.warning("Failed to sync %s: %s", path, exc)
+        for path in discover_codex_jsonl_files():
+            try:
+                self._sync_codex_file(path, force=force, verbose=verbose)
+            except Exception as exc:
+                log.warning("Failed to sync codex %s: %s", path, exc)
 
-    def _sync_file(self, path: Path, force: bool, verbose: bool) -> None:
+    def _sync_file(self, path: Path, source: str, force: bool, verbose: bool) -> None:
         mtime = path.stat().st_mtime
         row = self._conn.execute(
             "SELECT mtime, last_byte_offset FROM files WHERE path = ?", (str(path),)
@@ -137,24 +152,50 @@ class Store:
 
         with self._conn:
             if session:
-                self._upsert_session(session)
+                self._upsert_session(session, source=source)
             for turn in turns:
-                if session:
-                    self._upsert_turn(turn, session.session_id)
-                else:
-                    self._upsert_turn(turn, turn.session_id)
+                sid = session.session_id if session else turn.session_id
+                self._upsert_turn(turn, sid, source=source)
 
             self._conn.execute(
                 "INSERT OR REPLACE INTO files(path, mtime, last_byte_offset) VALUES (?, ?, ?)",
                 (str(path), mtime, final_offset),
             )
 
-    def _upsert_session(self, s: SessionRecord) -> None:
+    def _sync_codex_file(self, path: Path, force: bool, verbose: bool) -> None:
+        mtime = path.stat().st_mtime
+        row = self._conn.execute(
+            "SELECT mtime, last_byte_offset FROM files WHERE path = ?", (str(path),)
+        ).fetchone()
+
+        if not force and row and abs(row["mtime"] - mtime) < 0.001:
+            return
+
+        start_offset = 0 if force else (row["last_byte_offset"] if row else 0)
+
+        session: SessionRecord | None = None
+        final_offset = start_offset
+
+        with self._conn:
+            for record, offset in iter_codex_turns(path, start_offset=start_offset, verbose=verbose):
+                final_offset = offset
+                if isinstance(record, SessionRecord):
+                    session = record
+                    self._upsert_session(session, source="codex")
+                elif isinstance(record, TurnRecord) and session:
+                    self._upsert_turn(record, session.session_id, source="codex")
+
+            self._conn.execute(
+                "INSERT OR REPLACE INTO files(path, mtime, last_byte_offset) VALUES (?, ?, ?)",
+                (str(path), mtime, final_offset),
+            )
+
+    def _upsert_session(self, s: SessionRecord, source: str = "claude") -> None:
         self._conn.execute(
             """INSERT INTO sessions
                (session_id, project_path, project_name, started_at, ended_at, summary,
-                parent_session_id, jsonl_path, is_sidechain, first_user_text)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                parent_session_id, jsonl_path, is_sidechain, first_user_text, source)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT(session_id) DO UPDATE SET
                  ended_at = excluded.ended_at,
                  summary  = excluded.summary,
@@ -164,17 +205,17 @@ class Store:
                 s.session_id, s.project_path, s.project_name,
                 s.started_at, s.ended_at, s.summary,
                 s.parent_session_id, s.jsonl_path,
-                int(s.is_sidechain), s.first_user_text,
+                int(s.is_sidechain), s.first_user_text, source,
             ),
         )
 
-    def _upsert_turn(self, t: TurnRecord, session_id: str) -> None:
+    def _upsert_turn(self, t: TurnRecord, session_id: str, source: str = "claude") -> None:
         self._conn.execute(
             """INSERT INTO turns
                (turn_id, session_id, ts, model,
                 input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens,
-                cache_creation_1h_tokens, cache_creation_5m_tokens, user_msg_ts)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                cache_creation_1h_tokens, cache_creation_5m_tokens, user_msg_ts, source)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT(turn_id) DO UPDATE SET
                  ts = excluded.ts,
                  model = excluded.model,
@@ -191,7 +232,7 @@ class Store:
                 t.usage.input_tokens, t.usage.output_tokens,
                 t.usage.cache_creation_input_tokens, t.usage.cache_read_input_tokens,
                 t.usage.cache_creation_1h_tokens, t.usage.cache_creation_5m_tokens,
-                t.user_msg_ts,
+                t.user_msg_ts, source,
             ),
         )
         self._conn.execute("DELETE FROM tool_calls WHERE turn_id = ?", (t.turn_id,))

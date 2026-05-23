@@ -1,6 +1,51 @@
 [_meta]
-updated = "2026-05-22"
+updated = "2026-05-23"
 source = "https://platform.claude.com/docs/en/about-claude/pricing"
+
+# OpenAI / Codex CLI models
+# cache_read_per_mtok = 50% of input (OpenAI cached prompt discount)
+# cache_write_*_per_mtok = 0 (OpenAI has no explicit cache-write charge)
+# Rates approximate — verify at https://openai.com/api/pricing
+
+[models."gpt-5.5"]
+display_name = "GPT-5.5 (Codex)"
+input_per_mtok = 3.00
+output_per_mtok = 12.00
+cache_write_5m_per_mtok = 0.00
+cache_write_1h_per_mtok = 0.00
+cache_read_per_mtok = 1.50
+
+[models."gpt-4o"]
+display_name = "GPT-4o"
+input_per_mtok = 2.50
+output_per_mtok = 10.00
+cache_write_5m_per_mtok = 0.00
+cache_write_1h_per_mtok = 0.00
+cache_read_per_mtok = 1.25
+
+[models."gpt-4o-mini"]
+display_name = "GPT-4o mini"
+input_per_mtok = 0.15
+output_per_mtok = 0.60
+cache_write_5m_per_mtok = 0.00
+cache_write_1h_per_mtok = 0.00
+cache_read_per_mtok = 0.075
+
+[models."o3"]
+display_name = "OpenAI o3"
+input_per_mtok = 2.00
+output_per_mtok = 8.00
+cache_write_5m_per_mtok = 0.00
+cache_write_1h_per_mtok = 0.00
+cache_read_per_mtok = 0.50
+
+[models."o4-mini"]
+display_name = "OpenAI o4-mini"
+input_per_mtok = 1.10
+output_per_mtok = 4.40
+cache_write_5m_per_mtok = 0.00
+cache_write_1h_per_mtok = 0.00
+cache_read_per_mtok = 0.275
 
 # All rates are USD per million tokens.
 # cache_write_5m_per_mtok = 5-minute ephemeral cache write rate (1.25x base input)

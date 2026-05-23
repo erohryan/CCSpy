@@ -47,13 +47,13 @@ class TaskBreakdownPanel(Widget):
             b_plan = PLAN_CHAR * plan_filled
             b_exec = EXEC_CHAR * exec_filled
 
-            tasks = str(s.task_count).rjust(3)
+            tasks = str(s.task_count)
             dur = fmt_duration(s.avg_duration_secs).rjust(7)
 
             t.append(f"  {name} ", style="white")
             t.append(b_plan, style="#555577")
             t.append(b_exec, style="#9999cc")
-            t.append(f" {tasks}t", style="white")
+            t.append(f" {tasks} msgs", style="white")
             t.append(f" {dur} avg\n", style="dim")
 
         return t

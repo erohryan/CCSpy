@@ -27,6 +27,7 @@ from ccspy.ui.widgets.project_bars import ProjectBarsPanel
 from ccspy.ui.widgets.model_bars import ModelBarsPanel
 from ccspy.ui.widgets.category_bars import CategoryBarsPanel
 from ccspy.ui.widgets.tool_bars import ToolBarsPanel
+from ccspy.ui.widgets.task_breakdown import TaskBreakdownPanel
 from ccspy.ui.widgets.time_of_day import TimeOfDayPanel
 from ccspy.ui.widgets.subagent_stats import SubagentStatsPanel
 from ccspy.ui.widgets.timing import TimingPanel
@@ -131,7 +132,7 @@ class DashboardScreen(Screen):
             yield ModelBarsPanel(id="model-bars")
         with Horizontal(classes="two-col"):
             yield CategoryBarsPanel(id="category-bars")
-            yield ToolBarsPanel(id="tool-bars")
+            yield TaskBreakdownPanel(id="task-breakdown")
         yield _Separator()
         yield TimeOfDayPanel(id="time-of-day")
         yield SubagentStatsPanel(id="subagent-stats")
@@ -175,7 +176,7 @@ class DashboardScreen(Screen):
         self.query_one("#project-bars", ProjectBarsPanel).update(d.by_project, self._filter)
         self.query_one("#model-bars", ModelBarsPanel).update(d.by_model)
         self.query_one("#category-bars", CategoryBarsPanel).update(d.by_category)
-        self.query_one("#tool-bars", ToolBarsPanel).update(d.by_tool)
+        self.query_one("#task-breakdown", TaskBreakdownPanel).update(d.task_stats)
         self.query_one("#time-of-day", TimeOfDayPanel).update(d.by_hour)
         self.query_one("#subagent-stats", SubagentStatsPanel).update(d.subagents)
         self.query_one("#timing", TimingPanel).update(d.timing)

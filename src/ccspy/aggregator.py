@@ -105,6 +105,20 @@ class TimingStats:
 
 
 @dataclass
+class ProjectTaskStats:
+    project_name: str
+    task_count: int = 0
+    avg_duration_secs: float = 0.0
+    total_tokens: int = 0
+    plan_tokens: int = 0
+    execute_tokens: int = 0
+
+    @property
+    def execute_pct(self) -> float:
+        return (self.execute_tokens / self.total_tokens * 100) if self.total_tokens else 0.0
+
+
+@dataclass
 class DashboardData:
     range_days: int
     totals: RangeTotals = field(default_factory=RangeTotals)
@@ -117,6 +131,7 @@ class DashboardData:
     by_hour: list[HourBucket] = field(default_factory=list)
     subagents: SubagentStats = field(default_factory=SubagentStats)
     timing: TimingStats = field(default_factory=TimingStats)
+    task_stats: list[ProjectTaskStats] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -178,6 +193,7 @@ class Aggregator:
         data.by_hour = self._by_hour(since)
         data.subagents = self._subagents(since)
         data.timing = self._timing_stats(since)
+        data.task_stats = self._task_stats_by_project(since)
 
         if category_rules:
             data.by_category = self._by_category(since, category_rules, categorise)
@@ -367,6 +383,61 @@ class Aggregator:
             total_spawned=total,
             avg_per_session=round(total / max(sessions, 1), 1),
         )
+
+    def _task_stats_by_project(self, since: str) -> list[ProjectTaskStats]:
+        # Classify turns as execute if they called any modifying tool.
+        # All other turns (read-only tools or no tools) are plan phase.
+        rows = self._store.query(
+            """
+            WITH execute_turns AS (
+              SELECT DISTINCT turn_id FROM tool_calls
+              WHERE tool_name IN (
+                'Edit','Write','Bash','NotebookEdit','MultiEdit','TodoWrite'
+              )
+            ),
+            tasks AS (
+              SELECT
+                s.project_name,
+                t.session_id,
+                t.user_msg_ts,
+                (JULIANDAY(MAX(t.ts)) - JULIANDAY(t.user_msg_ts)) * 86400 AS duration_secs,
+                SUM(t.input_tokens + t.output_tokens + t.cache_creation_tokens + t.cache_read_tokens) AS total_tok,
+                SUM(CASE WHEN et.turn_id IS NOT NULL
+                    THEN t.input_tokens + t.output_tokens + t.cache_creation_tokens + t.cache_read_tokens
+                    ELSE 0 END) AS execute_tok,
+                SUM(CASE WHEN et.turn_id IS NULL
+                    THEN t.input_tokens + t.output_tokens + t.cache_creation_tokens + t.cache_read_tokens
+                    ELSE 0 END) AS plan_tok
+              FROM turns t
+              JOIN sessions s ON t.session_id = s.session_id
+              LEFT JOIN execute_turns et ON t.turn_id = et.turn_id
+              WHERE t.ts >= ? AND t.user_msg_ts != ''
+              GROUP BY s.project_name, t.session_id, t.user_msg_ts
+            )
+            SELECT
+              project_name,
+              COUNT(*)            AS task_count,
+              AVG(duration_secs)  AS avg_duration_secs,
+              SUM(total_tok)      AS total_tokens,
+              SUM(plan_tok)       AS plan_tokens,
+              SUM(execute_tok)    AS execute_tokens
+            FROM tasks
+            GROUP BY project_name
+            ORDER BY total_tokens DESC
+            """,
+            (since,),
+        )
+        return [
+            ProjectTaskStats(
+                project_name=r["project_name"],
+                task_count=r["task_count"] or 0,
+                avg_duration_secs=r["avg_duration_secs"] or 0.0,
+                total_tokens=r["total_tokens"] or 0,
+                plan_tokens=r["plan_tokens"] or 0,
+                execute_tokens=r["execute_tokens"] or 0,
+            )
+            for r in rows
+        ]
 
     def _timing_stats(self, since: str) -> TimingStats:
         rows = self._store.query(

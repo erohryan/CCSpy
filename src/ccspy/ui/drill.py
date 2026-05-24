@@ -7,7 +7,7 @@ from textual.screen import Screen
 from textual.widgets import DataTable, Label, Static
 
 from ccspy.store import Store
-from ccspy.ui.widgets._format import fmt_tokens, fmt_cost, fmt_pct, short_model
+from ccspy.ui.widgets._format import fmt_tokens, fmt_cost, fmt_pct, fmt_duration, short_model
 
 _BACK = [Binding("escape", "app.pop_screen", "Back", show=False)]
 
@@ -57,19 +57,26 @@ class ProjectPickerScreen(Screen):
 
     def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
         project_name = str(event.row_key.value)
-        self.app.push_screen(ProjectDrillScreen(store=self._store, project_name=project_name))
+        self.app.push_screen(ProjectDetailScreen(store=self._store, project_name=project_name))
 
 
 # ---------------------------------------------------------------------------
-# Project drill
+# Project detail (per-day breakdown)
 # ---------------------------------------------------------------------------
 
-class ProjectDrillScreen(Screen):
-    """Sessions for a single project — Enter to drill into a session."""
+class ProjectDetailScreen(Screen):
+    """Per-day token, cost, and build-time breakdown for one project."""
 
-    BINDINGS = _BACK
+    BINDINGS = [
+        Binding("escape", "app.pop_screen", "Back", show=False),
+        Binding("s", "all_sessions", "all sessions", show=False),
+    ]
 
-    DEFAULT_CSS = "ProjectDrillScreen { background: #0d0d1a; } ProjectDrillScreen DataTable { height: 1fr; }"
+    DEFAULT_CSS = """
+    ProjectDetailScreen { background: #0d0d1a; }
+    ProjectDetailScreen DataTable { height: 1fr; }
+    ProjectDetailScreen Label { color: #7a7a9a; padding: 0 2; height: 1; }
+    """
 
     def __init__(self, store: Store, project_name: str) -> None:
         super().__init__()
@@ -77,25 +84,199 @@ class ProjectDrillScreen(Screen):
         self._project_name = project_name
 
     def compose(self) -> ComposeResult:
-        yield _DrillHeader(f"p  {self._project_name}   Enter session detail   Esc back")
-        yield DataTable(id="proj-sess-table", cursor_type="row", zebra_stripes=True)
+        yield _DrillHeader(
+            f"proj  {self._project_name}   Enter → day sessions   s → all sessions   Esc back"
+        )
+        yield Label("", id="proj-totals")
+        yield DataTable(id="proj-day-table", cursor_type="row", zebra_stripes=True)
 
     def on_mount(self) -> None:
-        rows = self._store.query(
+        from ccspy.pricing import compute_cost
+
+        # Per-(day, model) token counts — needed to compute cost accurately
+        token_rows = self._store.query(
             """
-            SELECT s.session_id, s.started_at, s.first_user_text, s.is_sidechain,
-              COALESCE(SUM(t.input_tokens + t.output_tokens +
-                          t.cache_creation_tokens + t.cache_read_tokens), 0) as total_tokens,
-              GROUP_CONCAT(DISTINCT t.model) as models
-            FROM sessions s
-            LEFT JOIN turns t ON s.session_id = t.session_id
+            SELECT
+              substr(datetime(t.ts, 'localtime'), 1, 10) as day,
+              t.model,
+              SUM(t.input_tokens)               as inp,
+              SUM(t.output_tokens)              as out,
+              SUM(t.cache_creation_tokens)      as cc,
+              SUM(t.cache_read_tokens)          as cr,
+              SUM(t.cache_creation_1h_tokens)   as cc1h,
+              SUM(t.cache_creation_5m_tokens)   as cc5m
+            FROM turns t
+            JOIN sessions s ON t.session_id = s.session_id
             WHERE s.project_name = ?
-            GROUP BY s.session_id
-            ORDER BY s.started_at DESC
-            LIMIT 100
+            GROUP BY day, t.model
+            ORDER BY day DESC
             """,
             (self._project_name,),
         )
+
+        # Distinct sessions per day
+        sess_rows = self._store.query(
+            """
+            SELECT
+              substr(datetime(t.ts, 'localtime'), 1, 10) as day,
+              COUNT(DISTINCT t.session_id) as sess_count
+            FROM turns t
+            JOIN sessions s ON t.session_id = s.session_id
+            WHERE s.project_name = ?
+            GROUP BY day
+            """,
+            (self._project_name,),
+        )
+        sess_by_day = {r["day"]: r["sess_count"] or 0 for r in sess_rows}
+
+        # Build time per day (0.5–600 s window per turn, same cap as global timing)
+        build_rows = self._store.query(
+            """
+            SELECT
+              substr(datetime(t.ts, 'localtime'), 1, 10) as day,
+              SUM(CASE
+                WHEN t.user_msg_ts != '' AND t.user_msg_ts < t.ts
+                 AND (JULIANDAY(t.ts) - JULIANDAY(t.user_msg_ts)) * 86400 BETWEEN 0.5 AND 600
+                THEN (JULIANDAY(t.ts) - JULIANDAY(t.user_msg_ts)) * 86400
+                ELSE 0 END) as build_secs
+            FROM turns t
+            JOIN sessions s ON t.session_id = s.session_id
+            WHERE s.project_name = ?
+            GROUP BY day
+            """,
+            (self._project_name,),
+        )
+        build_by_day = {r["day"]: r["build_secs"] or 0.0 for r in build_rows}
+
+        # Merge token rows into per-day totals
+        days: dict[str, dict] = {}
+        costs_by_day: dict[str, list] = {}
+        for r in token_rows:
+            day = r["day"]
+            if day not in days:
+                days[day] = {"inp": 0, "out": 0, "cc": 0, "cr": 0}
+                costs_by_day[day] = []
+            d = days[day]
+            inp, out, cc, cr = r["inp"] or 0, r["out"] or 0, r["cc"] or 0, r["cr"] or 0
+            d["inp"] += inp; d["out"] += out; d["cc"] += cc; d["cr"] += cr
+            cost = compute_cost(
+                r["model"],
+                input_tokens=inp, output_tokens=out,
+                cache_creation_tokens=cc, cache_read_tokens=cr,
+                cache_creation_1h_tokens=r["cc1h"] or 0,
+                cache_creation_5m_tokens=r["cc5m"] or 0,
+            )
+            costs_by_day[day].append(cost)
+
+        def _sum(costs):
+            known = [c for c in costs if c is not None]
+            return round(sum(known), 6) if known else None
+
+        # Summary totals
+        total_inp = sum(d["inp"] for d in days.values())
+        total_out = sum(d["out"] for d in days.values())
+        total_cc  = sum(d["cc"]  for d in days.values())
+        total_cr  = sum(d["cr"]  for d in days.values())
+        total_tokens = total_inp + total_out + total_cc + total_cr
+        total_cost   = _sum([c for cs in costs_by_day.values() for c in cs])
+        total_build  = sum(build_by_day.values())
+        days_worked  = len(days)
+        total_sess   = sum(sess_by_day.values())
+
+        self.query_one("#proj-totals", Label).update(
+            f"  {days_worked} days worked · {total_sess} sessions · "
+            f"{fmt_tokens(total_tokens)} tokens · {fmt_cost(total_cost)} api-equiv · "
+            f"{fmt_duration(total_build)} building"
+        )
+
+        dt = self.query_one("#proj-day-table", DataTable)
+        dt.add_columns("Date", "Sess", "Tokens", "In", "Out", "Cache", "Cost", "Build")
+        for day in sorted(days.keys(), reverse=True):
+            d = days[day]
+            total = d["inp"] + d["out"] + d["cc"] + d["cr"]
+            cache = d["cc"] + d["cr"]
+            cost  = _sum(costs_by_day[day])
+            build = build_by_day.get(day, 0.0)
+            dt.add_row(
+                day,
+                str(sess_by_day.get(day, 0)),
+                fmt_tokens(total),
+                fmt_tokens(d["inp"]),
+                fmt_tokens(d["out"]),
+                fmt_tokens(cache),
+                fmt_cost(cost),
+                fmt_duration(build) if build > 1 else "—",
+                key=day,
+            )
+        dt.focus()
+
+    def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
+        day = str(event.row_key.value)
+        self.app.push_screen(
+            ProjectDrillScreen(store=self._store, project_name=self._project_name, date=day)
+        )
+
+    def action_all_sessions(self) -> None:
+        self.app.push_screen(
+            ProjectDrillScreen(store=self._store, project_name=self._project_name)
+        )
+
+
+# ---------------------------------------------------------------------------
+# Project drill (session list)
+# ---------------------------------------------------------------------------
+
+class ProjectDrillScreen(Screen):
+    """Sessions for a single project, optionally filtered to a specific date."""
+
+    BINDINGS = _BACK
+
+    DEFAULT_CSS = "ProjectDrillScreen { background: #0d0d1a; } ProjectDrillScreen DataTable { height: 1fr; }"
+
+    def __init__(self, store: Store, project_name: str, date: str | None = None) -> None:
+        super().__init__()
+        self._store = store
+        self._project_name = project_name
+        self._date = date
+
+    def compose(self) -> ComposeResult:
+        suffix = f"  ({self._date})" if self._date else ""
+        yield _DrillHeader(f"p  {self._project_name}{suffix}   Enter session detail   Esc back")
+        yield DataTable(id="proj-sess-table", cursor_type="row", zebra_stripes=True)
+
+    def on_mount(self) -> None:
+        if self._date:
+            rows = self._store.query(
+                """
+                SELECT s.session_id, s.started_at, s.first_user_text, s.is_sidechain,
+                  COALESCE(SUM(t.input_tokens + t.output_tokens +
+                              t.cache_creation_tokens + t.cache_read_tokens), 0) as total_tokens,
+                  GROUP_CONCAT(DISTINCT t.model) as models
+                FROM sessions s
+                LEFT JOIN turns t ON s.session_id = t.session_id
+                WHERE s.project_name = ?
+                  AND substr(datetime(s.started_at, 'localtime'), 1, 10) = ?
+                GROUP BY s.session_id
+                ORDER BY s.started_at DESC
+                """,
+                (self._project_name, self._date),
+            )
+        else:
+            rows = self._store.query(
+                """
+                SELECT s.session_id, s.started_at, s.first_user_text, s.is_sidechain,
+                  COALESCE(SUM(t.input_tokens + t.output_tokens +
+                              t.cache_creation_tokens + t.cache_read_tokens), 0) as total_tokens,
+                  GROUP_CONCAT(DISTINCT t.model) as models
+                FROM sessions s
+                LEFT JOIN turns t ON s.session_id = t.session_id
+                WHERE s.project_name = ?
+                GROUP BY s.session_id
+                ORDER BY s.started_at DESC
+                LIMIT 100
+                """,
+                (self._project_name,),
+            )
 
         dt = self.query_one("#proj-sess-table", DataTable)
         dt.add_columns("Date", "Time", "First message", "Tokens", "Model(s)", "Type")

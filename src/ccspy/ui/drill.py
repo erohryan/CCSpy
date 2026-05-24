@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from textual.app import ComposeResult
 from textual.binding import Binding
+from textual.containers import ScrollableContainer
 from textual.screen import Screen
 from textual.widgets import DataTable, Label, Static
 
@@ -57,7 +58,213 @@ class ProjectPickerScreen(Screen):
 
     def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
         project_name = str(event.row_key.value)
-        self.app.push_screen(ProjectDetailScreen(store=self._store, project_name=project_name))
+        self.app.push_screen(ProjectOverviewScreen(store=self._store, project_name=project_name))
+
+
+# ---------------------------------------------------------------------------
+# Project overview (metrics + day utilization chart)
+# ---------------------------------------------------------------------------
+
+class ProjectOverviewScreen(Screen):
+    """Key metrics and day-by-day utilization chart for one project."""
+
+    BINDINGS = [
+        Binding("escape", "app.pop_screen", "Back", show=False),
+        Binding("enter", "daily_detail", "daily detail", show=False),
+        Binding("d", "daily_detail", "daily detail", show=False),
+        Binding("s", "all_sessions", "sessions", show=False),
+    ]
+
+    DEFAULT_CSS = """
+    ProjectOverviewScreen { background: #0d0d1a; }
+    ProjectOverviewScreen ScrollableContainer { height: 1fr; }
+    """
+
+    def __init__(self, store: Store, project_name: str) -> None:
+        super().__init__()
+        self._store = store
+        self._project_name = project_name
+
+    def compose(self) -> ComposeResult:
+        yield _DrillHeader(
+            f"proj  {self._project_name}   Enter/d → daily table   s → sessions   Esc back"
+        )
+        yield ScrollableContainer(Static("", id="overview-body"))
+
+    def on_mount(self) -> None:
+        from ccspy.pricing import compute_cost
+        from rich.text import Text
+
+        token_rows = self._store.query(
+            """
+            SELECT
+              substr(datetime(t.ts, 'localtime'), 1, 10) as day,
+              t.model,
+              SUM(t.input_tokens)             as inp,
+              SUM(t.output_tokens)            as out,
+              SUM(t.cache_creation_tokens)    as cc,
+              SUM(t.cache_read_tokens)        as cr,
+              SUM(t.cache_creation_1h_tokens) as cc1h,
+              SUM(t.cache_creation_5m_tokens) as cc5m
+            FROM turns t
+            JOIN sessions s ON t.session_id = s.session_id
+            WHERE s.project_name = ?
+            GROUP BY day, t.model
+            ORDER BY day DESC
+            """,
+            (self._project_name,),
+        )
+        sess_rows = self._store.query(
+            """
+            SELECT substr(datetime(t.ts, 'localtime'), 1, 10) as day,
+                   COUNT(DISTINCT t.session_id) as sess_count
+            FROM turns t
+            JOIN sessions s ON t.session_id = s.session_id
+            WHERE s.project_name = ?
+            GROUP BY day
+            """,
+            (self._project_name,),
+        )
+        sess_by_day = {r["day"]: r["sess_count"] or 0 for r in sess_rows}
+
+        build_rows = self._store.query(
+            """
+            SELECT
+              substr(datetime(t.ts, 'localtime'), 1, 10) as day,
+              SUM(CASE
+                WHEN t.user_msg_ts != '' AND t.user_msg_ts < t.ts
+                 AND (JULIANDAY(t.ts) - JULIANDAY(t.user_msg_ts)) * 86400 BETWEEN 0.5 AND 600
+                THEN (JULIANDAY(t.ts) - JULIANDAY(t.user_msg_ts)) * 86400
+                ELSE 0 END) as build_secs
+            FROM turns t
+            JOIN sessions s ON t.session_id = s.session_id
+            WHERE s.project_name = ?
+            GROUP BY day
+            """,
+            (self._project_name,),
+        )
+        build_by_day = {r["day"]: r["build_secs"] or 0.0 for r in build_rows}
+
+        days: dict[str, dict] = {}
+        costs_by_day: dict[str, list] = {}
+        total_inp = total_out = total_cc = total_cr = 0
+
+        for r in token_rows:
+            day = r["day"]
+            if day not in days:
+                days[day] = {"inp": 0, "out": 0, "cc": 0, "cr": 0}
+                costs_by_day[day] = []
+            d = days[day]
+            inp, out, cc, cr = r["inp"] or 0, r["out"] or 0, r["cc"] or 0, r["cr"] or 0
+            d["inp"] += inp; d["out"] += out; d["cc"] += cc; d["cr"] += cr
+            total_inp += inp; total_out += out; total_cc += cc; total_cr += cr
+            cost = compute_cost(
+                r["model"],
+                input_tokens=inp, output_tokens=out,
+                cache_creation_tokens=cc, cache_read_tokens=cr,
+                cache_creation_1h_tokens=r["cc1h"] or 0,
+                cache_creation_5m_tokens=r["cc5m"] or 0,
+            )
+            costs_by_day[day].append(cost)
+
+        def _sum(costs):
+            known = [c for c in costs if c is not None]
+            return round(sum(known), 6) if known else None
+
+        total_tokens = total_inp + total_out + total_cc + total_cr
+        total_cost   = _sum([c for cs in costs_by_day.values() for c in cs])
+        total_build  = sum(build_by_day.values())
+        days_worked  = len(days)
+        total_sess   = sum(sess_by_day.values())
+
+        avg_session_cost  = (total_cost / total_sess) if total_cost and total_sess > 0 else None
+        avg_day_tokens    = total_tokens // days_worked if days_worked else 0
+        avg_build_per_sess = total_build / total_sess if total_sess > 0 else 0.0
+
+        t = Text()
+
+        # ── Headline metrics ──────────────────────────────────────────────
+        t.append("\n")
+        t.append(f"  {days_worked}", style="bold white")
+        t.append(" days worked  ·  ", style="dim")
+        t.append(f"{total_sess}", style="bold white")
+        t.append(" sessions  ·  ", style="dim")
+        t.append(fmt_tokens(total_tokens), style="bold #9999cc")
+        t.append(" tokens  ·  ", style="dim")
+        t.append(fmt_cost(total_cost), style="bold #44cf6c")
+        t.append(" api-equiv  ·  ", style="dim")
+        t.append(fmt_duration(total_build) if total_build > 1 else "—", style="bold #cc9944")
+        t.append(" building\n", style="dim")
+
+        t.append("  avg/session  ", style="dim")
+        t.append(fmt_cost(avg_session_cost), style="#44cf6c")
+        t.append("  ·  avg/day  ", style="dim")
+        t.append(fmt_tokens(avg_day_tokens), style="#9999cc")
+        t.append("  ·  avg build/session  ", style="dim")
+        t.append(fmt_duration(avg_build_per_sess) if avg_build_per_sess > 1 else "—", style="#cc9944")
+        t.append("\n")
+
+        # ── Day utilization bar chart ─────────────────────────────────────
+        BAR_WIDTH = 30
+        t.append("\n  DAILY TOKEN USAGE\n", style="bold #7a7a9a")
+        t.append("  " + "─" * 68 + "\n", style="dim #2d2d4e")
+
+        max_day_tok = max(
+            (d["inp"] + d["out"] + d["cc"] + d["cr"] for d in days.values()),
+            default=1,
+        ) or 1
+
+        for day in sorted(days.keys(), reverse=True):
+            d = days[day]
+            day_tok   = d["inp"] + d["out"] + d["cc"] + d["cr"]
+            day_cost  = _sum(costs_by_day[day])
+            build     = build_by_day.get(day, 0.0)
+            filled    = max(1, round(day_tok / max_day_tok * BAR_WIDTH))
+            empty     = BAR_WIDTH - filled
+
+            t.append(f"  {day}  ", style="dim")
+            t.append("█" * filled, style="#4455cc")
+            t.append("░" * empty, style="dim #2d2d4e")
+            t.append(f"  {fmt_tokens(day_tok):>6}", style="white")
+            t.append(f"  {fmt_cost(day_cost):>7}", style="#44cf6c")
+            build_str = fmt_duration(build) if build > 1 else "—"
+            t.append(f"  {build_str:>7}", style="#cc9944")
+            t.append(f"  {sess_by_day.get(day, 0)} sess\n", style="dim")
+
+        # ── Token type breakdown ──────────────────────────────────────────
+        BREAK_WIDTH = 24
+        t.append("\n  TOKEN BREAKDOWN\n", style="bold #7a7a9a")
+        t.append("  " + "─" * 68 + "\n", style="dim #2d2d4e")
+
+        breakdown = [
+            ("Input   ", total_inp,  "#6677cc"),
+            ("Output  ", total_out,  "#44cf6c"),
+            ("Cache-R ", total_cr,   "#cc9944"),
+            ("Cache-W ", total_cc,   "#996633"),
+        ]
+        for label, val, color in breakdown:
+            pct    = val / total_tokens * 100 if total_tokens else 0.0
+            filled = max(0, round(pct / 100 * BREAK_WIDTH))
+            empty  = BREAK_WIDTH - filled
+            t.append(f"  {label}", style="dim")
+            t.append(f"{fmt_tokens(val):>6}", style="white")
+            t.append(f"  {pct:4.0f}%  ", style="dim")
+            t.append("█" * filled, style=color)
+            t.append("░" * empty, style="dim #2d2d4e")
+            t.append("\n")
+
+        t.append("\n")
+        self.query_one("#overview-body", Static).update(t)
+
+    def action_daily_detail(self) -> None:
+        self.app.push_screen(
+            ProjectDetailScreen(store=self._store, project_name=self._project_name)
+        )
+
+    def action_all_sessions(self) -> None:
+        self.app.push_screen(
+            ProjectDrillScreen(store=self._store, project_name=self._project_name)
+        )
 
 
 # ---------------------------------------------------------------------------

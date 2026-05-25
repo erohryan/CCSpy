@@ -55,7 +55,7 @@ STOP_WORDS = {
 }
 
 MAX_SUGGESTIONS = 12
-MIN_CLUSTER_SIZE = 3
+MIN_CLUSTER_SIZE = 2
 CO_OCCUR_RATIO = 0.25  # keyword must appear in at least 25% of cluster sessions
 
 
@@ -79,11 +79,13 @@ def get_uncategorised_texts(store, since: str, rules: list[dict]) -> tuple[list[
 
     rows = store.query(
         """
-        SELECT s.first_user_text,
-               SUM(t.input_tokens + t.output_tokens + t.cache_creation_tokens + t.cache_read_tokens) as tok
+        SELECT s.session_id, s.first_user_text,
+               COALESCE(SUM(t.input_tokens + t.output_tokens +
+                            t.cache_creation_tokens + t.cache_read_tokens), 0) as tok
         FROM sessions s
-        JOIN turns t ON s.session_id = t.session_id
-        WHERE t.ts >= ? AND s.first_user_text != ''
+        LEFT JOIN turns t ON s.session_id = t.session_id
+        WHERE s.first_user_text != ''
+          AND s.started_at >= ?
         GROUP BY s.session_id, s.first_user_text
         """,
         (since,),

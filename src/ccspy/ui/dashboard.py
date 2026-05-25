@@ -271,12 +271,11 @@ class DashboardScreen(Screen):
     def action_suggest_categories(self) -> None:
         from ccspy.suggest import get_uncategorised_texts, analyse
         from ccspy.ui.suggest_screen import SuggestScreen
-        from ccspy.aggregator import _since_ts
         from ccspy.categories import load_rules, USER_CATEGORIES_PATH
 
         rules = load_rules()
-        since = _since_ts(self._range_days)
-        texts, tokens = get_uncategorised_texts(self._store, since, rules)
+        # Analyse all-time uncategorised sessions — category assignment is not range-dependent
+        texts, tokens = get_uncategorised_texts(self._store, "1970-01-01", rules)
         suggestions = analyse(texts)
 
         def _on_accept(n: int) -> None:

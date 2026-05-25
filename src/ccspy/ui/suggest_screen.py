@@ -92,8 +92,10 @@ class SuggestScreen(Screen):
         Binding("a", "accept_all", "accept", show=False),
         Binding("e", "edit_file", "edit", show=False),
         Binding("space", "toggle_focused", "toggle", show=False),
-        Binding("j,down", "focus_next", "next", show=False),
-        Binding("k,up", "focus_previous", "prev", show=False),
+        Binding("j", "focus_next", "next", show=False),
+        Binding("down", "focus_next", "next", show=False),
+        Binding("k", "focus_previous", "prev", show=False),
+        Binding("up", "focus_previous", "prev", show=False),
     ]
 
     DEFAULT_CSS = """

@@ -5,6 +5,7 @@ from pathlib import Path
 
 from textual.app import ComposeResult
 from textual.binding import Binding
+from textual.containers import ScrollableContainer
 from textual.screen import Screen
 from textual.widgets import Static
 from rich.text import Text
@@ -35,7 +36,8 @@ class SuggestScreen(Screen):
 
     DEFAULT_CSS = """
     SuggestScreen { background: #0d0d1a; }
-    SuggestScreen #suggest-body { height: 1fr; padding: 0 0; color: #7a7a9a; overflow-y: auto; }
+    SuggestScreen ScrollableContainer { height: 1fr; }
+    SuggestScreen #suggest-body { color: #7a7a9a; }
     """
 
     def __init__(
@@ -75,10 +77,12 @@ class SuggestScreen(Screen):
         parts.append(f"{self._n_suggest} suggestions" if self._rules else "no patterns found")
         parts.append(f"{n_rules} existing rules")
         yield _Header("  ·  ".join(parts))
-        yield Static("", id="suggest-body")
+        yield ScrollableContainer(Static("", id="suggest-body"), id="suggest-scroll")
         yield _Footer()
 
     def on_mount(self) -> None:
+        # Prevent ScrollableContainer from stealing arrow keys
+        self.query_one("#suggest-scroll", ScrollableContainer).can_focus = False
         self._render()
 
     def _render(self) -> None:
@@ -129,6 +133,28 @@ class SuggestScreen(Screen):
 
         t.append("\n")
         self.query_one("#suggest-body", Static).update(t)
+        self._scroll_to_cursor()
+
+    def _cursor_y(self) -> int:
+        """Approximate line number of the cursor for scroll-into-view."""
+        y = 2  # blank line + section header + divider = 3 lines
+        if self._cursor < self._n_suggest:
+            for i in range(self._cursor):
+                y += 2 if self._rules[i].sample_texts else 1
+            return y
+        # Past suggestions
+        for r in self._rules:
+            y += 2 if r.sample_texts else 1
+        y += 3  # blank + existing header + divider
+        y += self._cursor - self._n_suggest
+        return y
+
+    def _scroll_to_cursor(self) -> None:
+        try:
+            sc = self.query_one("#suggest-scroll", ScrollableContainer)
+            sc.scroll_to(y=max(0, self._cursor_y() - 3), animate=False)
+        except Exception:
+            pass
 
     # ------------------------------------------------------------------
     # Keyboard

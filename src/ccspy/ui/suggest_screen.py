@@ -70,7 +70,7 @@ class SuggestionRow(Widget):
         # Sample message
         sample = r.sample_texts[0] if r.sample_texts else ""
         if sample:
-            t.append(f"       "{sample[:90]}"\n", style="dim #555577" if r.accepted else "dim #3a3a5a")
+            t.append(f'       “{sample[:90]}”\n', style="dim #555577" if r.accepted else "dim #3a3a5a")
 
         return t
 

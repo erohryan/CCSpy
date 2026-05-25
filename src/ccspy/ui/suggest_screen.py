@@ -83,9 +83,9 @@ class SuggestScreen(Screen):
     def on_mount(self) -> None:
         # Prevent ScrollableContainer from stealing arrow keys
         self.query_one("#suggest-scroll", ScrollableContainer).can_focus = False
-        self._render()
+        self._draw()
 
-    def _render(self) -> None:
+    def _draw(self) -> None:
         t = Text()
 
         # ── New suggestions ───────────────────────────────────────────────
@@ -165,17 +165,17 @@ class SuggestScreen(Screen):
         if key in ("j", "down"):
             if self._total > 0:
                 self._cursor = (self._cursor + 1) % self._total
-                self._render()
+                self._draw()
             event.stop()
         elif key in ("k", "up"):
             if self._total > 0:
                 self._cursor = (self._cursor - 1) % self._total
-                self._render()
+                self._draw()
             event.stop()
         elif key == "space":
             if self._cursor < self._n_suggest:
                 self._rules[self._cursor].accepted = not self._rules[self._cursor].accepted
-                self._render()
+                self._draw()
             event.stop()
         elif key == "d":
             if self._cursor >= self._n_suggest:
@@ -193,7 +193,7 @@ class SuggestScreen(Screen):
             self._existing.pop(j)
             self._cursor = min(self._cursor, max(0, self._total - 1))
             self.notify(f'Deleted "{category}"', title="ccspy")
-            self._render()
+            self._draw()
 
     # ------------------------------------------------------------------
     # Actions

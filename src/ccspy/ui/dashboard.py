@@ -273,9 +273,9 @@ class DashboardScreen(Screen):
         from ccspy.ui.suggest_screen import SuggestScreen
         from ccspy.categories import load_rules, USER_CATEGORIES_PATH
 
-        rules = load_rules()
+        existing_rules = load_rules()
         # Analyse all-time uncategorised sessions — category assignment is not range-dependent
-        texts, tokens = get_uncategorised_texts(self._store, "1970-01-01", rules)
+        texts, tokens = get_uncategorised_texts(self._store, "1970-01-01", existing_rules)
         suggestions = analyse(texts)
 
         def _on_accept(n: int) -> None:
@@ -289,6 +289,7 @@ class DashboardScreen(Screen):
                 uncategorised_count=len(texts),
                 uncategorised_tokens=tokens,
                 categories_path=USER_CATEGORIES_PATH,
+                existing_rules=existing_rules,
                 on_accept=_on_accept,
             )
         )

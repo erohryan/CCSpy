@@ -162,6 +162,24 @@ def analyse(texts: list[str]) -> list[SuggestedRule]:
     return suggestions
 
 
+def delete_rule(category_name: str, categories_path: Path) -> bool:
+    """Remove the [[rule]] block with the given category name. Returns True if found."""
+    import re
+    if not categories_path.exists():
+        return False
+    content = categories_path.read_text(encoding="utf-8")
+    # Split on every [[rule]] boundary; prepend sentinel newline so the first block splits cleanly
+    parts = re.split(r'(?=\n\[\[rule\]\])', "\n" + content)
+    pattern = re.compile(rf'\bcategory\s*=\s*"{re.escape(category_name)}"')
+    new_parts = [p for p in parts if not pattern.search(p)]
+    if len(new_parts) == len(parts):
+        return False
+    result = "".join(new_parts).lstrip("\n")
+    result = re.sub(r"\n{3,}", "\n\n", result)
+    categories_path.write_text(result, encoding="utf-8")
+    return True
+
+
 def rules_as_toml(rules: list[SuggestedRule]) -> str:
     """Render accepted rules as TOML entries ready to append to categories.toml."""
     lines: list[str] = []

@@ -84,8 +84,7 @@ class SessionRecord(BaseModel):
 # Path discovery
 # ---------------------------------------------------------------------------
 
-import os as _os
-CLAUDE_PROJECTS = Path(_os.environ["CLAUDE_HOME"]) / "projects" if "CLAUDE_HOME" in _os.environ else Path.home() / ".claude" / "projects"
+from ccspy._paths import CLAUDE_PROJECTS
 
 
 def discover_jsonl_files(projects_dir: Path = CLAUDE_PROJECTS) -> list[Path]:

@@ -1,9 +1,23 @@
 """Shared formatting helpers for dashboard widgets."""
 from __future__ import annotations
 
+from rich.text import Text
+
 SPARK_CHARS = " ▁▂▃▄▅▆▇█"
 BAR_CHAR = "█"
 TOOL_BAR_CHAR = "▓"
+
+# Colour palette for stacked proportion bars (cycles if more slices than colours)
+SLICE_COLORS = [
+    "#2ac3de",  # cyan
+    "#c678dd",  # magenta
+    "#e0823a",  # orange
+    "#44cf6c",  # green
+    "#9999cc",  # lavender
+    "#cc6644",  # terracotta
+    "#de9a26",  # amber
+    "#7eb8c9",  # steel blue
+]
 
 MODEL_SHORT_NAMES: dict[str, str] = {
     "claude-opus-4-7": "Opus 4.7",
@@ -74,6 +88,37 @@ def bar(pct: float, width: int = 16, char: str = BAR_CHAR) -> str:
     """Render a horizontal bar of given width proportional to pct (0-100)."""
     filled = max(0, round(pct / 100 * width))
     return char * filled
+
+
+def stacked_bar(
+    items: list[tuple[str, float]],
+    width: int = 34,
+    colors: list[str] | None = None,
+) -> Text:
+    """Single proportional bar where each slice is a differently-coloured segment.
+
+    items: [(label, pct), ...] where pct is 0–100 and slices need not sum to 100.
+    Remaining space (if pcts < 100) is left as empty chars so the bar always
+    fills `width` characters.
+    """
+    t = Text()
+    if not items:
+        return t
+    palette = colors or SLICE_COLORS
+    total = sum(pct for _, pct in items)
+    if total == 0:
+        return t
+
+    allocated = 0
+    for i, (_, pct) in enumerate(items):
+        is_last = i == len(items) - 1
+        chars = (width - allocated) if is_last else max(0, round(pct / 100 * width))
+        chars = min(chars, width - allocated)
+        if chars > 0:
+            t.append(BAR_CHAR * chars, style=palette[i % len(palette)])
+        allocated += chars
+
+    return t
 
 
 def delta_str(current: int, previous: int) -> str:

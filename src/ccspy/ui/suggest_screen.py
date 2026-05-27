@@ -206,9 +206,9 @@ class SuggestScreen(Screen):
         self._on_accept(n)
 
     def action_edit_file(self) -> None:
-        import subprocess, os
-        editor = os.environ.get("EDITOR", "nano")
+        import subprocess
+        from ccspy._paths import default_editor
         with self.app.suspend():
-            subprocess.run([editor, str(self._categories_path)])
+            subprocess.run([default_editor(), str(self._categories_path)])
         self.app.pop_screen()
         self._on_accept(0)

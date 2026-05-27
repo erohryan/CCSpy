@@ -15,6 +15,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from ccspy._paths import CONFIG_DIR
 from ccspy.parser import (
     SessionRecord,
     TurnRecord,
@@ -27,8 +28,6 @@ from ccspy.codex_parser import (
 )
 
 log = logging.getLogger(__name__)
-
-CONFIG_DIR = Path.home() / ".config" / "ccspy"
 _DB_NAME = "cache.db"
 
 _DDL = """

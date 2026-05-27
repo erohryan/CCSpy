@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import subprocess
-import sys
 import time
 from pathlib import Path
 
@@ -14,6 +13,7 @@ from textual.widget import Widget
 from textual.widgets import Static
 from rich.text import Text
 
+from ccspy._paths import CONFIG_DIR, default_editor
 from ccspy.aggregator import Aggregator, DashboardData
 from ccspy.categories import ensure_user_categories, load_rules
 from ccspy.live import get_live_sessions
@@ -32,7 +32,7 @@ from ccspy.ui.widgets.time_of_day import TimeOfDayPanel
 from ccspy.ui.widgets.subagent_stats import SubagentStatsPanel
 from ccspy.ui.widgets.timing import TimingPanel
 
-CONFIG_CATEGORIES = Path.home() / ".config" / "ccspy" / "categories.toml"
+CONFIG_CATEGORIES = CONFIG_DIR / "categories.toml"
 LIVE_REFRESH_SECONDS = 5.0
 
 
@@ -84,7 +84,7 @@ class _CommandFooter(Static):
     DEFAULT_CSS = "_CommandFooter { height: 1; background: #12122a; color: #555577; padding: 0 2; }"
 
     def render(self) -> str:
-        return "commands:  : palette   p projects   s sessions   t tools   u suggest   x export   / filter   r reload   ? help   q quit"
+        return "commands:  : palette   p projects   s sessions   t tools   u suggest   l leaderboard   c chart   x export   / filter   r reload   ? help   q quit"
 
 
 class DashboardScreen(Screen):
@@ -94,15 +94,17 @@ class DashboardScreen(Screen):
         Binding("1", "set_range('1')", "1d", show=False),
         Binding("2", "set_range('2')", "7d", show=False),
         Binding("3", "set_range('3')", "30d", show=False),
-        Binding("c", "custom_range", "custom", show=False),
+
         Binding(":", "command_palette", "palette", show=False),
         Binding("p", "drill_projects", "projects", show=False),
         Binding("s", "drill_sessions", "sessions", show=False),
         Binding("t", "drill_tools", "tools", show=False),
         Binding("e", "edit_categories", "edit rules", show=False),
         Binding("u", "suggest_categories", "suggest", show=False),
+        Binding("l", "leaderboard", "leaderboard", show=False),
         Binding("x", "export_csv", "export", show=False),
         Binding("/", "filter_prompt", "filter", show=False),
+        Binding("c", "toggle_chart", "chart", show=False),
         Binding("r", "reload", "reload", show=False),
         Binding("?", "help_overlay", "help", show=False),
         Binding("q", "app.quit", "quit", show=False),
@@ -115,6 +117,7 @@ class DashboardScreen(Screen):
         self._filter: str = ""
         self._data: DashboardData | None = None
         self._last_sync: float = time.time()
+        self._stacked: bool = False
 
     # ------------------------------------------------------------------
     # Compose
@@ -177,6 +180,11 @@ class DashboardScreen(Screen):
         self.query_one("#project-bars", ProjectBarsPanel).update(d.by_project, self._filter)
         self.query_one("#model-bars", ModelBarsPanel).update(d.by_model)
         self.query_one("#category-bars", CategoryBarsPanel).update(d.by_category)
+        # Reapply chart mode so stacked indicator survives a reload
+        if self._stacked:
+            self.query_one("#project-bars",  ProjectBarsPanel).set_mode(True)
+            self.query_one("#model-bars",     ModelBarsPanel).set_mode(True)
+            self.query_one("#category-bars",  CategoryBarsPanel).set_mode(True)
         self.query_one("#task-breakdown", TaskBreakdownPanel).update(d.task_stats)
         self.query_one("#time-of-day", TimeOfDayPanel).update(d.by_hour)
         self.query_one("#subagent-stats", SubagentStatsPanel).update(d.subagents)
@@ -185,6 +193,12 @@ class DashboardScreen(Screen):
     # ------------------------------------------------------------------
     # Actions
     # ------------------------------------------------------------------
+
+    def action_toggle_chart(self) -> None:
+        self._stacked = not self._stacked
+        self.query_one("#project-bars", ProjectBarsPanel).set_mode(self._stacked)
+        self.query_one("#model-bars",   ModelBarsPanel).set_mode(self._stacked)
+        self.query_one("#category-bars", CategoryBarsPanel).set_mode(self._stacked)
 
     def action_set_range(self, key: str) -> None:
         self._range_days = {"1": 0, "2": 7, "3": 30}[key]
@@ -195,7 +209,7 @@ class DashboardScreen(Screen):
         self._refresh_data()
 
     def action_edit_categories(self) -> None:
-        editor = sys.environ.get("EDITOR", "nano")
+        editor = default_editor()
         with self.app.suspend():
             subprocess.run([editor, str(CONFIG_CATEGORIES)])
         self._refresh_data()
@@ -265,8 +279,6 @@ class DashboardScreen(Screen):
                     self._data.by_project, filter_text=self._filter
                 )
 
-    def action_custom_range(self) -> None:
-        self.notify("Custom range: coming in Phase 6", title="ccspy")
 
     def action_suggest_categories(self) -> None:
         from ccspy.suggest import get_uncategorised_texts, analyse
@@ -293,6 +305,10 @@ class DashboardScreen(Screen):
                 on_accept=_on_accept,
             )
         )
+
+    def action_leaderboard(self) -> None:
+        from ccspy.ui.leaderboard_screen import LeaderboardScreen
+        self.app.push_screen(LeaderboardScreen(store=self._store))
 
     def action_help_overlay(self) -> None:
         from ccspy.ui.help_modal import HelpModal

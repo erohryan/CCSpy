@@ -10,7 +10,8 @@ import tomllib
 from importlib.resources import files
 from pathlib import Path
 
-CONFIG_DIR = Path.home() / ".config" / "ccspy"
+from ccspy._paths import CONFIG_DIR
+
 USER_CATEGORIES_PATH = CONFIG_DIR / "categories.toml"
 UNCATEGORISED = "uncategorized"
 

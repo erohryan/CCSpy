@@ -99,7 +99,7 @@ class LeaderboardScreen(Screen):
         threading.Thread(target=self._fetch_data, daemon=True).start()
 
     def _fetch_data(self) -> None:
-        from ccspy import leaderboard as lb
+        from ccspy import leaderboard as lb, identity, team
 
         try:
             top  = lb.fetch_top(10)
@@ -107,12 +107,19 @@ class LeaderboardScreen(Screen):
             rank = None
             if lb.is_opted_in():
                 lb.push_score(self._store)
-                rank = lb.fetch_rank(lb.get_user_token(), peak)
+                rank = lb.fetch_rank(identity.get_user_token(), peak)
             lb.save_cache(top, rank, peak)
             self._top   = top
             self._rank  = rank
             self._peak  = peak
             self._error = ""
+
+            # Also push team stats if in a team
+            try:
+                if team.is_in_team():
+                    team.push_stats(self._store)
+            except Exception:
+                pass
         except Exception as exc:
             self._error = str(exc)[:80]
         finally:
@@ -124,23 +131,17 @@ class LeaderboardScreen(Screen):
     # ------------------------------------------------------------------
 
     def _draw(self) -> None:
-        from ccspy import leaderboard as lb
+        from ccspy import leaderboard as lb, identity
 
         opted_in  = lb.is_opted_in()
-        pseudonym = lb.get_pseudonym()
+        pseudonym = identity.get_pseudonym()
 
         t = Text()
         t.append("\n")
         t.append("  CCSPY LEADERBOARD\n", style="bold white")
         t.append("  Peak tokens consumed in a single day\n\n", style="dim #7a7a9a")
 
-        if not lb.configured():
-            t.append("  Leaderboard backend not yet configured.\n\n", style="dim #cc6644")
-            t.append("  To enable:\n", style="dim #7a7a9a")
-            t.append("  1. Create a free project at supabase.com\n", style="dim #555577")
-            t.append("  2. Run the SQL setup from the top of leaderboard.py\n", style="dim #555577")
-            t.append("  3. Set SUPABASE_URL and SUPABASE_ANON_KEY in leaderboard.py\n", style="dim #555577")
-        elif self._loading and not self._top:
+        if self._loading and not self._top:
             t.append("  Connecting…\n", style="dim #7a7a9a")
         elif not self._top:
             t.append("  No entries yet — be the first!\n", style="dim")
@@ -248,23 +249,43 @@ class LeaderboardScreen(Screen):
     # ------------------------------------------------------------------
 
     def action_optin_flow(self) -> None:
-        from ccspy import leaderboard as lb
+        from ccspy import identity, leaderboard as lb
         from ccspy.ui.optin_modal import OptInModal
-        current = lb.get_pseudonym() if lb.is_opted_in() else ""
-        self.app.push_screen(OptInModal(current=current), self._handle_optin)
 
-    def _handle_optin(self, pseudonym: str | None) -> None:
+        if not identity.is_registered():
+            # Need to register first
+            self.app.push_screen(OptInModal(), self._handle_register_then_optin)
+        else:
+            # Already registered — update pseudonym on leaderboard or just opt in
+            current = identity.get_pseudonym() if lb.is_opted_in() else ""
+            self.app.push_screen(OptInModal(current=current), self._handle_optin_only)
+
+    def _handle_register_then_optin(self, pseudonym: str | None) -> None:
+        if not pseudonym:
+            return
+        from ccspy import identity, leaderboard as lb
+        claim_code = identity.register(pseudonym)
+        lb.opt_in()
+        self.notify(
+            f"Sync code: {claim_code} — save this, it cannot be recovered!",
+            title="ccspy identity",
+            timeout=15,
+        )
+        self.notify(f'Joined leaderboard as "{pseudonym}"', title="ccspy leaderboard")
+        self.action_refresh()
+
+    def _handle_optin_only(self, pseudonym: str | None) -> None:
         if not pseudonym:
             return
         from ccspy import leaderboard as lb
-        lb.opt_in(pseudonym)
+        lb.opt_in()
         self.notify(f'Joined as "{pseudonym}"', title="ccspy leaderboard")
         self.action_refresh()
 
     def action_optout(self) -> None:
-        from ccspy import leaderboard as lb
+        from ccspy import leaderboard as lb, identity
         if lb.is_opted_in():
-            name = lb.get_pseudonym()
+            name = identity.get_pseudonym()
             lb.opt_out()
             self.notify(f'Removed "{name}" from leaderboard', title="ccspy")
             self._rank = None

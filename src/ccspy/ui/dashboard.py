@@ -84,7 +84,7 @@ class _CommandFooter(Static):
     DEFAULT_CSS = "_CommandFooter { height: 1; background: #12122a; color: #555577; padding: 0 2; }"
 
     def render(self) -> str:
-        return "commands:  : palette   p projects   s sessions   t tools   u suggest   l leaderboard   c chart   x export   / filter   r reload   ? help   q quit"
+        return "commands:  : palette   p projects   s sessions   t tools   u suggest   l leaderboard   m team   c chart   x export   / filter   r reload   ? help   q quit"
 
 
 class DashboardScreen(Screen):
@@ -102,6 +102,7 @@ class DashboardScreen(Screen):
         Binding("e", "edit_categories", "edit rules", show=False),
         Binding("u", "suggest_categories", "suggest", show=False),
         Binding("l", "leaderboard", "leaderboard", show=False),
+        Binding("m", "team",        "team",        show=False),
         Binding("x", "export_csv", "export", show=False),
         Binding("/", "filter_prompt", "filter", show=False),
         Binding("c", "toggle_chart", "chart", show=False),
@@ -309,6 +310,10 @@ class DashboardScreen(Screen):
     def action_leaderboard(self) -> None:
         from ccspy.ui.leaderboard_screen import LeaderboardScreen
         self.app.push_screen(LeaderboardScreen(store=self._store))
+
+    def action_team(self) -> None:
+        from ccspy.ui.team_screen import TeamScreen
+        self.app.push_screen(TeamScreen(store=self._store))
 
     def action_help_overlay(self) -> None:
         from ccspy.ui.help_modal import HelpModal

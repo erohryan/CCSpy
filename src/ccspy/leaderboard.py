@@ -31,23 +31,44 @@ def opt_out() -> None:
 
 # ── Local stats ───────────────────────────────────────────────────────────────
 
-def peak_day_tokens(store) -> int:
-    """All-time peak tokens consumed in a single calendar day."""
+def peak_day_info(store) -> tuple[int, str | None]:
+    """All-time peak tokens for a single calendar day, plus the date it occurred."""
     rows = store.query(
         """
-        SELECT COALESCE(SUM(t.input_tokens + t.output_tokens +
-                            t.cache_creation_tokens + t.cache_read_tokens), 0) AS tok
+        SELECT date(s.started_at, 'localtime') AS day,
+               SUM(t.input_tokens + t.output_tokens +
+                   t.cache_creation_tokens + t.cache_read_tokens) AS tok
         FROM sessions s
         JOIN turns t ON s.session_id = t.session_id
-        GROUP BY date(s.started_at, 'localtime')
+        GROUP BY day
         ORDER BY tok DESC
         LIMIT 1
         """,
         (),
     )
     if rows:
-        return int(rows[0]["tok"] or 0)
-    return 0
+        return int(rows[0]["tok"] or 0), rows[0]["day"]
+    return 0, None
+
+
+def peak_day_tokens(store) -> int:
+    """All-time peak tokens consumed in a single calendar day."""
+    return peak_day_info(store)[0]
+
+
+def today_tokens(store) -> int:
+    """Tokens consumed today (local calendar day)."""
+    rows = store.query(
+        """
+        SELECT COALESCE(SUM(t.input_tokens + t.output_tokens +
+                            t.cache_creation_tokens + t.cache_read_tokens), 0) AS tok
+        FROM sessions s
+        JOIN turns t ON s.session_id = t.session_id
+        WHERE date(s.started_at, 'localtime') = date('now', 'localtime')
+        """,
+        (),
+    )
+    return int(rows[0]["tok"] or 0) if rows else 0
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
@@ -55,7 +76,7 @@ def peak_day_tokens(store) -> int:
 def fetch_top(limit: int = 10) -> list[dict]:
     """Fetch the top-N leaderboard entries sorted by peak_day descending."""
     result = sb.get(
-        f"{_TABLE}?select=pseudonym,peak_day"
+        f"{_TABLE}?select=pseudonym,peak_day,peak_day_date"
         f"&order=peak_day.desc&limit={limit}"
     )
     return result if isinstance(result, list) else []
@@ -77,14 +98,15 @@ def push_score(store) -> bool:
     pseudonym = identity.get_pseudonym()
     if not token or not pseudonym:
         return False
-    peak = peak_day_tokens(store)
+    peak, peak_date = peak_day_info(store)
     if peak == 0:
         return False
     return sb.upsert(_TABLE, {
-        "user_token": token,
-        "pseudonym":  pseudonym,
-        "peak_day":   peak,
-        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "user_token":    token,
+        "pseudonym":     pseudonym,
+        "peak_day":      peak,
+        "peak_day_date": peak_date,
+        "updated_at":    datetime.now(timezone.utc).isoformat(),
     })
 
 
@@ -101,8 +123,16 @@ def load_cache() -> dict:
     return {}
 
 
-def save_cache(top: list, rank: int | None, peak: int) -> None:
+def save_cache(
+    top: list,
+    rank: int | None,
+    peak: int,
+    peak_date: str | None = None,
+    today: int = 0,
+) -> None:
     _CACHE.parent.mkdir(parents=True, exist_ok=True)
-    _CACHE.write_text(json.dumps(
-        {"top": top, "rank": rank, "peak": peak, "ts": time.time()}
-    ))
+    _CACHE.write_text(json.dumps({
+        "top": top, "rank": rank, "peak": peak,
+        "peak_date": peak_date, "today": today,
+        "ts": time.time(),
+    }))

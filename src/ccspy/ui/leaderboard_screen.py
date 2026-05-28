@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import threading
+from datetime import date as _date
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import ScrollableContainer
@@ -33,6 +34,21 @@ def _trunc(s: str, w: int) -> str:
     return s[:w]
 
 
+def _days_ago(date_str: str | None) -> str:
+    if not date_str:
+        return ""
+    try:
+        d = _date.fromisoformat(date_str[:10])
+        delta = (_date.today() - d).days
+        if delta == 0:
+            return "today"
+        if delta == 1:
+            return "yesterday"
+        return f"{delta} days ago"
+    except Exception:
+        return ""
+
+
 class _Header(Static):
     DEFAULT_CSS = "_Header { height: 1; background: #12122a; color: #7a7a9a; padding: 0 2; }"
 
@@ -61,12 +77,14 @@ class LeaderboardScreen(Screen):
 
     def __init__(self, store) -> None:
         super().__init__()
-        self._store  = store
-        self._top:   list[dict] = []
-        self._rank:  int | None = None
-        self._peak:  int        = 0
-        self._loading            = True
-        self._error: str         = ""
+        self._store      = store
+        self._top:       list[dict]  = []
+        self._rank:      int | None  = None
+        self._peak:      int         = 0
+        self._peak_date: str | None  = None
+        self._today:     int         = 0
+        self._loading                = True
+        self._error:     str         = ""
 
     def compose(self) -> ComposeResult:
         yield _Header("ccspy  ·  leaderboard  ·  peak tokens in a single day")
@@ -87,10 +105,12 @@ class LeaderboardScreen(Screen):
 
         cache = lb.load_cache()
         if cache:
-            self._top   = cache.get("top", [])
-            self._rank  = cache.get("rank")
-            self._peak  = cache.get("peak", 0)
-            self._loading = False
+            self._top       = cache.get("top", [])
+            self._rank      = cache.get("rank")
+            self._peak      = cache.get("peak", 0)
+            self._peak_date = cache.get("peak_date")
+            self._today     = cache.get("today", 0)
+            self._loading   = False
             self._draw()
         else:
             self._loading = True
@@ -102,17 +122,20 @@ class LeaderboardScreen(Screen):
         from ccspy import leaderboard as lb, identity, team
 
         try:
-            top  = lb.fetch_top(10)
-            peak = lb.peak_day_tokens(self._store)
-            rank = None
+            top              = lb.fetch_top(10)
+            peak, peak_date  = lb.peak_day_info(self._store)
+            today            = lb.today_tokens(self._store)
+            rank             = None
             if lb.is_opted_in():
                 lb.push_score(self._store)
                 rank = lb.fetch_rank(identity.get_user_token(), peak)
-            lb.save_cache(top, rank, peak)
-            self._top   = top
-            self._rank  = rank
-            self._peak  = peak
-            self._error = ""
+            lb.save_cache(top, rank, peak, peak_date, today)
+            self._top       = top
+            self._rank      = rank
+            self._peak      = peak
+            self._peak_date = peak_date
+            self._today     = today
+            self._error     = ""
 
             # Also push team stats if in a team
             try:
@@ -151,15 +174,24 @@ class LeaderboardScreen(Screen):
             self._draw_podium(t)
             self._draw_rest(t)
 
-        # Personal rank bar
+        # Personal stats bar
         t.append("\n  " + "─" * 56 + "\n", style="dim #2d2d4e")
         if opted_in:
             rank_s  = f"#{self._rank}" if self._rank else "unranked"
-            peak_s  = _fmt(self._peak) if self._peak else "─"
-            t.append(f'  You: {rank_s}  "{pseudonym}"  ·  {peak_s} tok/day\n', style="bold #9999cc")
+            best_s  = _fmt(self._peak) if self._peak else "─"
+            ago_s   = _days_ago(self._peak_date)
+            today_s = _fmt(self._today) if self._today else "─"
+            t.append(f'  You ({rank_s})  "{pseudonym}"\n', style="bold #9999cc")
+            t.append(f"  Best day:  {best_s}", style="#9999cc")
+            if ago_s:
+                t.append(f"  ·  {ago_s}", style="dim #9999cc")
+            t.append("\n")
+            t.append(f"  Today:     {today_s}\n", style="#9999cc")
         else:
             t.append("  You are not on the leaderboard. ", style="dim #7a7a9a")
             t.append("Press i to join.\n", style="#9999cc")
+            today_s = _fmt(self._today) if self._today else "─"
+            t.append(f"  Today:     {today_s}\n", style="dim #7a7a9a")
         t.append("  " + "─" * 56 + "\n", style="dim #2d2d4e")
 
         if self._error:
@@ -191,11 +223,13 @@ class LeaderboardScreen(Screen):
             dim  = f"dim {color}"
             nm   = _name(entry, W)
             sc   = _score_str(entry, W > 14)
+            da   = _days_ago(entry.get("peak_day_date") if entry else None)
             return [
                 (f"┌{'─' * W}┐",                     bold),
                 (f"│{_pad(f'{medal}  #{rank}', W)}│", bold),
                 (f"│{_pad(nm, W)}│",                  bold),
                 (f"│{_pad(sc, W)}│",                  color),
+                (f"│{_pad(da, W)}│",                  dim),
                 (f"└{'─' * W}┘",                      dim),
             ]
 
@@ -211,17 +245,17 @@ class LeaderboardScreen(Screen):
         def _a(seg: tuple) -> None:
             t.append(seg[0], style=seg[1] or None)
 
-        # Stepped podium (8 rows):
-        #   gold   (#1): rows 0–4 card, rows 5–7 pedestal  ← highest
-        #   silver (#2): rows 1–5 card, rows 6–7 pedestal
-        #   bronze (#3): rows 2–6 card, row  7   pedestal  ← lowest
-        for row in range(8):
+        # Stepped podium (9 rows, 6-row cards):
+        #   gold   (#1): rows 0–5 card, rows 6–8 pedestal  ← highest
+        #   silver (#2): rows 1–6 card, rows 7–8 pedestal
+        #   bronze (#3): rows 2–7 card, row  8   pedestal  ← lowest
+        for row in range(9):
             t.append(_IND)
 
             # Left — silver (#2)
             if row == 0:
                 _a(blank)
-            elif row <= 5:
+            elif row <= 6:
                 _a(silver_c[row - 1])
             else:
                 _a(s_ped)
@@ -229,7 +263,7 @@ class LeaderboardScreen(Screen):
             t.append(_GAP)
 
             # Centre — gold (#1)
-            if row <= 4:
+            if row <= 5:
                 _a(gold_c[row])
             else:
                 _a(g_ped)
@@ -239,7 +273,7 @@ class LeaderboardScreen(Screen):
             # Right — bronze (#3)
             if row <= 1:
                 _a(blank)
-            elif row <= 6:
+            elif row <= 7:
                 _a(bronze_c[row - 2])
             else:
                 _a(b_ped)

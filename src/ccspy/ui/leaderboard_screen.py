@@ -172,77 +172,93 @@ class LeaderboardScreen(Screen):
         e   = [top[i] if i < len(top) else None for i in range(3)]
         e1, e2, e3 = e[0], e[1], e[2]
 
-        def name(entry: dict | None, w: int) -> str:
+        def _name(entry: dict | None, inner: int) -> str:
             if not entry:
-                return "─" * min(4, w)
-            return _trunc(entry.get("pseudonym", "?"), w)
+                return "─" * min(4, inner - 2)
+            return _trunc(entry.get("pseudonym", "?"), inner - 2)
 
-        def score(entry: dict | None) -> str:
+        def _score_str(entry: dict | None, wide: bool) -> str:
             if not entry:
                 return "─"
-            return f"{entry.get('peak_day', 0):,}"
+            n = _fmt(entry.get("peak_day", 0))
+            return f"{n} tok/day" if wide else n
 
-        def _box_top(w: int, color: str) -> None:
-            t.append(f"┌{'─'*w}┐", style=f"bold {color}")
+        def _pad(s: str, w: int) -> str:
+            return f" {s:<{w - 2}} "
 
-        def _box_bot(w: int, color: str) -> None:
-            t.append(f"└{'─'*w}┘", style=f"dim {color}")
+        def _card(medal: str, rank: int, entry: dict | None, W: int, color: str) -> list:
+            bold = f"bold {color}"
+            dim  = f"dim {color}"
+            nm   = _name(entry, W)
+            sc   = _score_str(entry, W > 14)
+            return [
+                (f"┌{'─' * W}┐",                     bold),
+                (f"│{_pad(f'{medal}  #{rank}', W)}│", bold),
+                (f"│{_pad(nm, W)}│",                  bold),
+                (f"│{_pad(sc, W)}│",                  color),
+                (f"└{'─' * W}┘",                      dim),
+            ]
 
-        def _cell(content: str, w: int, color: str, bold: bool = False) -> None:
-            inner = f" {_trunc(content, w-2):<{w-2}} "
-            style = f"bold {color}" if bold else color
-            t.append(f"│{inner}│", style=style)
+        gold_c   = _card("★", 1, e1, _CW, _GOLD)
+        silver_c = _card("✦", 2, e2, _SW, _SILVER)
+        bronze_c = _card("·", 3, e3, _SW, _BRONZE)
 
-        # ── Top borders ───────────────────────────────────────────────
-        t.append(_IND)
-        _box_top(_SW, _SILVER)
-        t.append(_GAP)
-        _box_top(_CW, _GOLD)
-        t.append(_GAP)
-        _box_top(_SW, _BRONZE)
+        g_ped = ("█" * (_CW + 2), f"dim {_GOLD}")
+        s_ped = ("█" * (_SW + 2), f"dim {_SILVER}")
+        b_ped = ("█" * (_SW + 2), f"dim {_BRONZE}")
+        blank = (" " * (_SW + 2), "")
+
+        def _a(seg: tuple) -> None:
+            t.append(seg[0], style=seg[1] or None)
+
+        # Stepped podium (8 rows):
+        #   gold   (#1): rows 0–4 card, rows 5–7 pedestal  ← highest
+        #   silver (#2): rows 1–5 card, rows 6–7 pedestal
+        #   bronze (#3): rows 2–6 card, row  7   pedestal  ← lowest
+        for row in range(8):
+            t.append(_IND)
+
+            # Left — silver (#2)
+            if row == 0:
+                _a(blank)
+            elif row <= 5:
+                _a(silver_c[row - 1])
+            else:
+                _a(s_ped)
+
+            t.append(_GAP)
+
+            # Centre — gold (#1)
+            if row <= 4:
+                _a(gold_c[row])
+            else:
+                _a(g_ped)
+
+            t.append(_GAP)
+
+            # Right — bronze (#3)
+            if row <= 1:
+                _a(blank)
+            elif row <= 6:
+                _a(bronze_c[row - 2])
+            else:
+                _a(b_ped)
+
+            t.append("\n")
+
         t.append("\n")
-
-        # ── Rank / medal row ──────────────────────────────────────────
-        t.append(_IND)
-        _cell(f"✦  #2", _SW, _SILVER, bold=True)
-        t.append(_GAP)
-        _cell(f"★   #1", _CW, _GOLD,   bold=True)
-        t.append(_GAP)
-        _cell(f"·  #3", _SW, _BRONZE, bold=True)
-        t.append("\n")
-
-        # ── Name row ──────────────────────────────────────────────────
-        t.append(_IND)
-        _cell(name(e2, _SW - 2), _SW, _SILVER, bold=True)
-        t.append(_GAP)
-        _cell(name(e1, _CW - 2), _CW, _GOLD,   bold=True)
-        t.append(_GAP)
-        _cell(name(e3, _SW - 2), _SW, _BRONZE, bold=True)
-        t.append("\n")
-
-        # ── Score row ─────────────────────────────────────────────────
-        t.append(_IND)
-        _cell(score(e2), _SW, _SILVER)
-        t.append(_GAP)
-        _cell(score(e1), _CW, _GOLD)
-        t.append(_GAP)
-        _cell(score(e3), _SW, _BRONZE)
-        t.append("\n")
-
-        # ── Bottom borders ────────────────────────────────────────────
-        t.append(_IND)
-        _box_bot(_SW, _SILVER)
-        t.append(_GAP)
-        _box_bot(_CW, _GOLD)
-        t.append(_GAP)
-        _box_bot(_SW, _BRONZE)
-        t.append("\n\n")
 
     def _draw_rest(self, t: Text) -> None:
-        for i, entry in enumerate(self._top[3:], start=4):
+        rest = self._top[3:]
+        if not rest:
+            return
+        t.append("  ─────────────────────────────────────────────────────\n", style="dim #2d2d4e")
+        for i, entry in enumerate(rest, start=4):
             name  = _trunc(entry.get("pseudonym", "?"), 20)
-            score = f"{entry.get('peak_day', 0):,}"
-            t.append(f"  #{i:<3} {name:<22} {score:>14} tok\n", style="dim #7a7a9a")
+            score = _fmt(entry.get("peak_day", 0))
+            t.append(f"  #{i:<3} ", style="dim #555577")
+            t.append(f"{name:<22}", style="#7a7a9a")
+            t.append(f"{score:>10} tok/day\n", style="dim #555577")
 
     # ------------------------------------------------------------------
     # Actions

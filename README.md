@@ -42,6 +42,7 @@ Both sources are read automatically and merged into a unified dashboard. No conf
 - Python 3.11+
 - [uv](https://docs.astral.sh/uv/getting-started/installation/) (recommended) or pip
 - Claude Code and/or Codex CLI with at least one session on disk
+- **Windows only:** [Windows Terminal](https://aka.ms/terminal) — required for proper Unicode and colour rendering (the default `cmd.exe` will not display correctly)
 
 ---
 
@@ -68,6 +69,67 @@ pip install git+https://github.com/erohryan/CCSpy
 ```
 
 This puts `ccspy` on your PATH.
+
+---
+
+## Windows
+
+### Install
+
+Open **Windows Terminal** (PowerShell or cmd) and run the same install command:
+
+```powershell
+uv tool install git+https://github.com/erohryan/CCSpy
+```
+
+If `uv` is not installed, get it first:
+
+```powershell
+winget install astral-sh.uv
+```
+
+Then run:
+
+```powershell
+ccspy
+```
+
+### Data locations on Windows
+
+| Purpose | Path |
+|---------|------|
+| Claude Code CLI sessions | `%USERPROFILE%\.claude\projects\` |
+| Claude desktop app sessions | `%APPDATA%\Claude\projects\` |
+| Codex CLI sessions | `%USERPROFILE%\.codex\sessions\` |
+| ccspy config + cache | `%APPDATA%\ccspy\` |
+| Category rules | `%APPDATA%\ccspy\categories.toml` |
+
+ccspy checks the Claude Code CLI path first. If you installed via the Claude desktop app and the CLI path doesn't exist, it falls back to the `%APPDATA%\Claude\projects\` location automatically. If neither is found, set `CLAUDE_HOME` (see below).
+
+### Environment variables
+
+```powershell
+# Override Claude data location (e.g. if you used the desktop app installer)
+$env:CLAUDE_HOME = "$env:APPDATA\Claude"
+
+# Override ccspy config directory
+$env:CCSPY_CONFIG = "D:\my-ccspy-config"
+
+# Set a preferred editor for category rules (defaults to Notepad)
+$env:EDITOR = "code"   # VS Code
+```
+
+To make these permanent, run in PowerShell (user-scope, no admin needed):
+
+```powershell
+[System.Environment]::SetEnvironmentVariable("CLAUDE_HOME", "$env:APPDATA\Claude", "User")
+```
+
+Or: **Start → Edit the system environment variables → Environment Variables → User variables → New**
+
+### Editing category rules on Windows
+
+Press `e` in the dashboard to open `categories.toml` in Notepad. Set `EDITOR=code` (or any other editor on your PATH) to use a different one.
 
 ---
 
@@ -102,7 +164,10 @@ ccspy --help
 | `p` | Project picker → drill into sessions |
 | `s` | Session picker → drill into turns |
 | `t` | Tool picker → drill into per-project usage |
-| `e` | Edit category rules in `$EDITOR` |
+| `u` | Suggest category rules from uncategorised sessions |
+| `e` | Edit category rules in `$EDITOR` / Notepad |
+| `c` | Toggle chart style — individual bars ↔ stacked proportion bar |
+| `l` | Community leaderboard (opt-in) |
 | `x` | Export current view to CSV |
 | `/` | Filter dashboard by project name |
 | `r` | Force reload + cache sync |
@@ -138,9 +203,14 @@ If you see "rebuild cache to populate", run `ccspy cache rebuild` once. This re-
 
 ## Categories
 
-Categories classify your sessions by what you were doing. They're defined in `~/.config/ccspy/categories.toml` as keyword rules — first match wins.
+Categories classify your sessions by what you were doing. They're defined as keyword rules — first match wins.
 
-Press `e` in the dashboard to open the file in your `$EDITOR`. Changes take effect immediately on the next reload.
+| Platform | Config file |
+|----------|-------------|
+| macOS / Linux | `~/.config/ccspy/categories.toml` |
+| Windows | `%APPDATA%\ccspy\categories.toml` |
+
+Press `e` in the dashboard to open the file in your editor (`$EDITOR` on macOS/Linux, Notepad on Windows). Changes take effect immediately on the next reload. Press `u` to let ccspy suggest new rules from your uncategorised sessions.
 
 **Default categories:** debug · feature-build · design · planning · refactor · test · review · docs · setup · data-model · performance · security · devops · question
 
@@ -166,25 +236,37 @@ Pricing is bundled with the package and updated manually. Run `: → Pricing tab
 
 ## Non-standard data locations
 
-By default ccspy looks for data at `~/.claude/projects/` and `~/.codex/sessions/`. If yours is elsewhere (WSL, custom install, multiple accounts), set the appropriate env var:
+If your Claude Code or Codex data is not in the default location (WSL, custom install, multiple accounts), set the appropriate env var before running ccspy.
+
+**macOS / Linux**
 
 ```bash
-# Claude Code — WSL or custom install
-export CLAUDE_HOME="/mnt/c/Users/yourname/.claude"
-
-# Codex CLI — non-default location
+export CLAUDE_HOME="/mnt/c/Users/yourname/.claude"   # e.g. WSL accessing Windows files
 export CODEX_HOME="/path/to/your/.codex"
-
 ccspy
 ```
 
-Add these to your shell profile (`~/.zshrc`, `~/.bashrc`) to make them permanent.
+Add to `~/.zshrc` or `~/.bashrc` to make permanent.
+
+**Windows (PowerShell)**
+
+```powershell
+$env:CLAUDE_HOME = "$env:APPDATA\Claude"    # if using the Claude desktop app
+$env:CODEX_HOME  = "D:\custom\.codex"       # if Codex is on another drive
+ccspy
+```
+
+To set permanently (no admin required):
+
+```powershell
+[System.Environment]::SetEnvironmentVariable("CLAUDE_HOME", "$env:APPDATA\Claude", "User")
+```
 
 ---
 
 ## Cache
 
-The SQLite cache at `~/.config/ccspy/cache.db` tracks file mtimes and byte offsets for incremental parsing — only new content is re-read on each sync. The `r` key triggers a sync without a full rebuild.
+The SQLite cache (`~/.config/ccspy/cache.db` on macOS/Linux, `%APPDATA%\ccspy\cache.db` on Windows) tracks file mtimes and byte offsets for incremental parsing — only new content is re-read on each sync. The `r` key triggers a sync without a full rebuild.
 
 To start fresh:
 
@@ -196,6 +278,8 @@ ccspy cache rebuild
 
 ## Data locations
 
+**macOS / Linux**
+
 | Purpose | Path |
 |---------|------|
 | Claude Code transcripts | `~/.claude/projects/**/*.jsonl` |
@@ -204,7 +288,18 @@ ccspy cache rebuild
 | Category rules | `~/.config/ccspy/categories.toml` |
 | Logs | `~/.config/ccspy/ccspy.log` |
 
-ccspy never writes to `~/.claude/` or `~/.codex/`.
+**Windows**
+
+| Purpose | Path |
+|---------|------|
+| Claude Code CLI transcripts | `%USERPROFILE%\.claude\projects\**\*.jsonl` |
+| Claude desktop app transcripts | `%APPDATA%\Claude\projects\**\*.jsonl` |
+| Codex CLI transcripts | `%USERPROFILE%\.codex\sessions\**\*.jsonl` |
+| ccspy cache | `%APPDATA%\ccspy\cache.db` |
+| Category rules | `%APPDATA%\ccspy\categories.toml` |
+| Logs | `%APPDATA%\ccspy\ccspy.log` |
+
+ccspy never writes to Claude or Codex data directories.
 
 ---
 

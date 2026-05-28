@@ -203,9 +203,9 @@ class LeaderboardScreen(Screen):
         silver_c = _card("✦", 2, e2, _SW, _SILVER)
         bronze_c = _card("·", 3, e3, _SW, _BRONZE)
 
-        g_ped = ("█" * (_CW + 2), f"dim {_GOLD}")
-        s_ped = ("█" * (_SW + 2), f"dim {_SILVER}")
-        b_ped = ("█" * (_SW + 2), f"dim {_BRONZE}")
+        g_ped = ("█" * (_CW + 2), _GOLD)
+        s_ped = ("█" * (_SW + 2), _SILVER)
+        b_ped = ("█" * (_SW + 2), _BRONZE)
         blank = (" " * (_SW + 2), "")
 
         def _a(seg: tuple) -> None:

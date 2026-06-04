@@ -77,10 +77,12 @@ class ProjectBarsPanel(Widget):
                 name = p.project_name[:NAME_WIDTH].ljust(NAME_WIDTH)
                 b    = bar(p.pct, width=BAR_WIDTH)
                 tok  = fmt_tokens(p.total_tokens).rjust(6)
+                cost = fmt_cost(p.est_api_cost_usd).rjust(7)
                 pct  = fmt_pct(p.pct)
                 t.append(f"  {name} ", style="white")
                 t.append(f"{b:<{BAR_WIDTH}}", style="#2ac3de")
                 t.append(f" {tok}", style="white")
+                t.append(f" {cost}", style="#44cf6c")
                 t.append(f" {pct}\n", style="dim")
 
             if remaining:

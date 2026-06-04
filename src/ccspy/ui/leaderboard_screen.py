@@ -57,7 +57,7 @@ class _Footer(Static):
     DEFAULT_CSS = "_Footer { height: 1; background: #12122a; color: #555577; padding: 0 2; }"
 
     def render(self) -> str:
-        return "r refresh   i join / update score   o opt out   Esc back"
+        return "r force refresh   i join / update score   o opt out   Esc back"
 
 
 class LeaderboardScreen(Screen):
@@ -126,8 +126,12 @@ class LeaderboardScreen(Screen):
             peak, peak_date  = lb.peak_day_info(self._store)
             today            = lb.today_tokens(self._store)
             rank             = None
+            new_best         = False
             if lb.is_opted_in():
-                lb.push_score(self._store)
+                # Only push when the current peak beats the last cached peak
+                if peak > self._peak:
+                    lb.push_score(self._store)
+                    new_best = True
                 rank = lb.fetch_rank(identity.get_user_token(), peak)
             lb.save_cache(top, rank, peak, peak_date, today)
             self._top       = top
@@ -145,9 +149,16 @@ class LeaderboardScreen(Screen):
                 pass
         except Exception as exc:
             self._error = str(exc)[:80]
+            new_best = False
         finally:
             self._loading = False
             self.call_from_thread(self._draw)
+            if new_best:
+                self.call_from_thread(lambda: self.notify(
+                    f"New personal best: {_fmt(peak)} tok/day — leaderboard updated!",
+                    title="ccspy leaderboard",
+                    timeout=6,
+                ))
 
     # ------------------------------------------------------------------
     # Rendering

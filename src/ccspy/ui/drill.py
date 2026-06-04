@@ -36,20 +36,27 @@ class ProjectPickerScreen(Screen):
         super().__init__()
         self._store = store
         self._projects = data.by_project if data else []
+        self._range_days = data.range_days if data else 7
 
     def compose(self) -> ComposeResult:
-        yield _DrillHeader("p  Projects   Enter drill-down   Esc back")
+        range_label = "today" if self._range_days == 0 else f"{self._range_days}d"
+        yield _DrillHeader(f"p  Projects ({range_label})   Enter drill-down   Esc back")
         yield DataTable(id="proj-table", cursor_type="row", zebra_stripes=True)
 
     def on_mount(self) -> None:
+        from ccspy.aggregator import lifetime_project_costs
+        lifetime = lifetime_project_costs(self._store)
+
+        range_label = "today" if self._range_days == 0 else f"{self._range_days}d"
         dt = self.query_one("#proj-table", DataTable)
-        dt.add_columns("#", "Project", "Tokens", "api-equiv $", "Sessions", "%")
+        dt.add_columns("#", "Project", "Tokens", f"{range_label} $", "Lifetime $", "Sessions", "%")
         for i, p in enumerate(self._projects):
             dt.add_row(
                 str(i + 1),
-                p.project_name[:42],
+                p.project_name[:36],
                 fmt_tokens(p.total_tokens),
                 fmt_cost(p.est_api_cost_usd),
+                fmt_cost(lifetime.get(p.project_name)),
                 str(p.session_count),
                 fmt_pct(p.pct).strip(),
                 key=p.project_name,

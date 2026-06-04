@@ -163,6 +163,27 @@ def _sum_cost(costs: list[Optional[float]]) -> Optional[float]:
     return round(sum(known), 6) if known else None
 
 
+def lifetime_project_costs(store: Store) -> dict[str, Optional[float]]:
+    """All-time estimated API cost per project (no date filter)."""
+    from ccspy.pricing import compute_cost
+    rows = store.query(
+        f"""
+        SELECT s.project_name, t.model, {_TOKEN_COLS}
+        FROM turns t
+        JOIN sessions s ON t.session_id = s.session_id
+        GROUP BY s.project_name, t.model
+        """,
+        (),
+    )
+    costs: dict[str, list[Optional[float]]] = {}
+    for r in rows:
+        name = r["project_name"]
+        if name not in costs:
+            costs[name] = []
+        costs[name].append(_row_cost(r, r["model"], compute_cost))
+    return {name: _sum_cost(cs) for name, cs in costs.items()}
+
+
 # ---------------------------------------------------------------------------
 # Aggregator
 # ---------------------------------------------------------------------------

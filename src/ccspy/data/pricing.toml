@@ -1,6 +1,6 @@
 [_meta]
-updated = "2026-05-23"
-source = "https://platform.claude.com/docs/en/about-claude/pricing"
+updated = "2026-06-10"
+source = "https://www.anthropic.com/pricing"
 
 # OpenAI / Codex CLI models
 # cache_read_per_mtok = 50% of input (OpenAI cached prompt discount)
@@ -52,6 +52,30 @@ cache_read_per_mtok = 0.275
 # cache_write_1h_per_mtok = 1-hour ephemeral cache write rate (2x base input)
 # cache_read_per_mtok     = cache hit/refresh rate (0.1x base input)
 
+[models.claude-fable-5]
+display_name = "Claude Fable 5"
+input_per_mtok = 10.00
+output_per_mtok = 50.00
+cache_write_5m_per_mtok = 12.50
+cache_write_1h_per_mtok = 20.00
+cache_read_per_mtok = 1.00
+
+[models.claude-mythos-5]
+display_name = "Claude Mythos 5"
+input_per_mtok = 10.00
+output_per_mtok = 50.00
+cache_write_5m_per_mtok = 12.50
+cache_write_1h_per_mtok = 20.00
+cache_read_per_mtok = 1.00
+
+[models.claude-opus-4-8]
+display_name = "Claude Opus 4.8"
+input_per_mtok = 5.00
+output_per_mtok = 25.00
+cache_write_5m_per_mtok = 6.25
+cache_write_1h_per_mtok = 10.00
+cache_read_per_mtok = 0.50
+
 [models.claude-opus-4-7]
 display_name = "Claude Opus 4.7"
 input_per_mtok = 5.00
@@ -85,7 +109,7 @@ cache_write_1h_per_mtok = 30.00
 cache_read_per_mtok = 1.50
 
 [models."claude-opus-4-20250514"]
-display_name = "Claude Opus 4 (deprecated)"
+display_name = "Claude Opus 4 (retiring Jun 2026)"
 input_per_mtok = 15.00
 output_per_mtok = 75.00
 cache_write_5m_per_mtok = 18.75
@@ -109,7 +133,7 @@ cache_write_1h_per_mtok = 6.00
 cache_read_per_mtok = 0.30
 
 [models."claude-sonnet-4-20250514"]
-display_name = "Claude Sonnet 4 (deprecated)"
+display_name = "Claude Sonnet 4 (retiring Jun 2026)"
 input_per_mtok = 3.00
 output_per_mtok = 15.00
 cache_write_5m_per_mtok = 3.75

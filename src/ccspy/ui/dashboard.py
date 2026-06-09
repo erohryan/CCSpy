@@ -84,7 +84,7 @@ class _CommandFooter(Static):
     DEFAULT_CSS = "_CommandFooter { height: 1; background: #12122a; color: #555577; padding: 0 2; }"
 
     def render(self) -> str:
-        return "commands:  : palette   p projects   s sessions   t tools   u suggest   l leaderboard   m team   c chart   x export   / filter   r reload   ? help   q quit"
+        return "commands:  : palette   p projects   s sessions   t tools   u suggest   l leaderboard   m team   $ plan   c chart   x export   / filter   r reload   ? help   q quit"
 
 
 class DashboardScreen(Screen):
@@ -96,6 +96,7 @@ class DashboardScreen(Screen):
         Binding("3", "set_range('3')", "30d", show=False),
 
         Binding(":", "command_palette", "palette", show=False),
+        Binding("$", "set_plan",       "plan",    show=False),
         Binding("p", "drill_projects", "projects", show=False),
         Binding("s", "drill_sessions", "sessions", show=False),
         Binding("t", "drill_tools", "tools", show=False),
@@ -176,7 +177,13 @@ class DashboardScreen(Screen):
         d = self._data
         self.query_one("#dash-header", _Header).update(self._range_days, self._last_sync)
         self.query_one("#range-row", RangeRow).update(self._range_days)
-        self.query_one("#totals", TotalsPanel).update(d.totals, d.prev_totals)
+        from ccspy import plan as _plan
+        self.query_one("#totals", TotalsPanel).update(
+            d.totals, d.prev_totals,
+            range_days=self._range_days,
+            plan_name=_plan.get_plan_name(),
+            plan_monthly_cost=_plan.get_monthly_cost(),
+        )
         self.query_one("#daily", DailyPanel).update(d.daily)
         self.query_one("#project-bars", ProjectBarsPanel).update(d.by_project, self._filter)
         self.query_one("#model-bars", ModelBarsPanel).update(d.by_model)
@@ -237,6 +244,8 @@ class DashboardScreen(Screen):
                 self.action_export_csv()
             elif key == "reload":
                 self.action_reload()
+            elif key == "plan":
+                self.action_set_plan()
             elif key == "pricing":
                 from ccspy.ui.drill import PricingTableScreen
                 self.app.push_screen(PricingTableScreen())
@@ -306,6 +315,23 @@ class DashboardScreen(Screen):
                 on_accept=_on_accept,
             )
         )
+
+    def action_set_plan(self) -> None:
+        from ccspy.ui.plan_modal import PlanModal
+        from ccspy import plan as _plan
+        self.app.push_screen(
+            PlanModal(current_name=_plan.get_plan_name()),
+            self._handle_plan,
+        )
+
+    def _handle_plan(self, result: tuple[str, float] | None) -> None:
+        if result is None:
+            return
+        name, cost = result
+        from ccspy import plan as _plan
+        _plan.set_plan(name, cost)
+        self.notify(f"Plan set to {name} (${cost:.0f}/mo)", title="ccspy plan")
+        self._refresh_data()
 
     def action_leaderboard(self) -> None:
         from ccspy.ui.leaderboard_screen import LeaderboardScreen

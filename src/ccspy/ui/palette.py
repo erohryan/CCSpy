@@ -17,7 +17,8 @@ PALETTE_ACTIONS: list[dict] = [
     {"key": "edit_categories", "param": None, "label": "Edit categories",      "desc": "open categories.toml in $EDITOR"},
     {"key": "export_csv",      "param": None, "label": "Export CSV",           "desc": "save current view to ~/ccspy-export.csv"},
     {"key": "reload",          "param": None, "label": "Reload data",          "desc": "force resync from ~/.claude/"},
-    {"key": "pricing",         "param": None, "label": "Pricing table",        "desc": "show model pricing rates (api-equiv)"},
+    {"key": "plan",            "param": None, "label": "Set subscription plan",  "desc": "configure plan for break-even quota tracking"},
+    {"key": "pricing",         "param": None, "label": "Pricing table",          "desc": "show model pricing rates (api-equiv)"},
     {"key": "sources",         "param": None, "label": "Data sources",         "desc": "JSONL file stats and cache info"},
     {"key": "help",            "param": None, "label": "Help / shortcuts",     "desc": "keyboard shortcut reference"},
 ]

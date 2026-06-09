@@ -119,7 +119,7 @@ class LeaderboardScreen(Screen):
         threading.Thread(target=self._fetch_data, daemon=True).start()
 
     def _fetch_data(self) -> None:
-        from ccspy import leaderboard as lb, identity, team
+        from ccspy import leaderboard as lb, identity
 
         try:
             top              = lb.fetch_top(10)
@@ -141,12 +141,6 @@ class LeaderboardScreen(Screen):
             self._today     = today
             self._error     = ""
 
-            # Also push team stats if in a team
-            try:
-                if team.is_in_team():
-                    team.push_stats(self._store)
-            except Exception:
-                pass
         except Exception as exc:
             self._error = str(exc)[:80]
             new_best = False

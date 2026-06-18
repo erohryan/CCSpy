@@ -223,7 +223,11 @@ class Store:
                ON CONFLICT(session_id) DO UPDATE SET
                  ended_at = excluded.ended_at,
                  summary  = excluded.summary,
-                 first_user_text = excluded.first_user_text,
+                 first_user_text = CASE
+                   WHEN excluded.first_user_text != ''
+                   THEN excluded.first_user_text
+                   ELSE sessions.first_user_text
+                 END,
                  jsonl_path = CASE
                    WHEN sessions.jsonl_path LIKE '%subagents%'
                     AND excluded.jsonl_path NOT LIKE '%subagents%'

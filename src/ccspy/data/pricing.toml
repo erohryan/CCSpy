@@ -1,5 +1,5 @@
 [_meta]
-updated = "2026-06-10"
+updated = "2026-07-02"
 source = "https://www.anthropic.com/pricing"
 
 # OpenAI / Codex CLI models
@@ -51,6 +51,17 @@ cache_read_per_mtok = 0.275
 # cache_write_5m_per_mtok = 5-minute ephemeral cache write rate (1.25x base input)
 # cache_write_1h_per_mtok = 1-hour ephemeral cache write rate (2x base input)
 # cache_read_per_mtok     = cache hit/refresh rate (0.1x base input)
+
+# Sonnet 5 launched with promotional pricing through Aug 31 2026 ($2/$10),
+# reverting to standard rates ($3/$15) from Sep 1 2026.
+# Rates below reflect the promotional period.
+[models.claude-sonnet-5]
+display_name = "Claude Sonnet 5"
+input_per_mtok = 2.00
+output_per_mtok = 10.00
+cache_write_5m_per_mtok = 2.50
+cache_write_1h_per_mtok = 4.00
+cache_read_per_mtok = 0.20
 
 [models.claude-fable-5]
 display_name = "Claude Fable 5"
@@ -109,7 +120,7 @@ cache_write_1h_per_mtok = 30.00
 cache_read_per_mtok = 1.50
 
 [models."claude-opus-4-20250514"]
-display_name = "Claude Opus 4 (retiring Jun 2026)"
+display_name = "Claude Opus 4 (retired)"
 input_per_mtok = 15.00
 output_per_mtok = 75.00
 cache_write_5m_per_mtok = 18.75
@@ -133,7 +144,7 @@ cache_write_1h_per_mtok = 6.00
 cache_read_per_mtok = 0.30
 
 [models."claude-sonnet-4-20250514"]
-display_name = "Claude Sonnet 4 (retiring Jun 2026)"
+display_name = "Claude Sonnet 4 (retired)"
 input_per_mtok = 3.00
 output_per_mtok = 15.00
 cache_write_5m_per_mtok = 3.75

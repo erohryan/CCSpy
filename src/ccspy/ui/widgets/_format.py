@@ -20,6 +20,7 @@ SLICE_COLORS = [
 ]
 
 MODEL_SHORT_NAMES: dict[str, str] = {
+    "claude-sonnet-5": "Sonnet 5",
     "claude-fable-5": "Fable 5",
     "claude-mythos-5": "Mythos 5",
     "claude-opus-4-8": "Opus 4.8",
